@@ -41,7 +41,51 @@ export interface BrowserLaunchOptions {
   userDataDir?: string;
   slowMo?: number;
   timeout?: number;
+  /** Custom user agent string */
+  userAgent?: string;
+  /** Enable stealth mode to bypass bot detection (default: true) */
+  stealth?: boolean;
+  /** Locale for the browser (e.g., 'en-US') */
+  locale?: string;
+  /** Timezone ID (e.g., 'America/New_York') */
+  timezoneId?: string;
 }
+
+// ============================================================================
+// Stealth Chrome Arguments (from browser-use)
+// ============================================================================
+
+const STEALTH_CHROME_ARGS = [
+  // Disable automation detection
+  '--disable-blink-features=AutomationControlled',
+  // Disable features that reveal automation
+  '--disable-features=IsolateOrigins,site-per-process',
+  '--disable-infobars',
+  '--no-first-run',
+  '--no-service-autorun',
+  '--password-store=basic',
+  // Performance and stability
+  '--disable-background-networking',
+  '--disable-background-timer-throttling',
+  '--disable-backgrounding-occluded-windows',
+  '--disable-breakpad',
+  '--disable-component-extensions-with-background-pages',
+  '--disable-component-update',
+  '--disable-default-apps',
+  '--disable-dev-shm-usage',
+  '--disable-hang-monitor',
+  '--disable-ipc-flooding-protection',
+  '--disable-popup-blocking',
+  '--disable-prompt-on-repost',
+  '--disable-renderer-backgrounding',
+  '--disable-sync',
+  '--enable-features=NetworkService,NetworkServiceInProcess',
+  '--force-color-profile=srgb',
+  '--metrics-recording-only',
+  // Avoid detection via WebGL
+  '--disable-webgl',
+  '--disable-webgl2',
+];
 
 // ============================================================================
 // Screencast Types
@@ -127,9 +171,15 @@ export class BrowserManager {
 
     this.launchOptions = options;
     this.browserType = options.browser ?? 'chromium';
+    const stealthEnabled = options.stealth !== false; // Default to true
 
     const browserTypeInstance = this.getBrowserType();
     const launchArgs: string[] = [];
+
+    // Add stealth args for Chromium (enabled by default)
+    if (stealthEnabled && this.browserType === 'chromium') {
+      launchArgs.push(...STEALTH_CHROME_ARGS);
+    }
 
     // Add CDP port for Chromium
     if (options.cdpPort && this.browserType === 'chromium') {
@@ -142,19 +192,32 @@ export class BrowserManager {
       launchArgs.push(`--load-extension=${options.extensions.join(',')}`);
     }
 
+    // Context options shared between persistent and non-persistent contexts
+    const contextOptions = {
+      viewport: options.viewport ?? { width: 1280, height: 720 },
+      proxy: options.proxy,
+      extraHTTPHeaders: options.headers,
+      userAgent: options.userAgent,
+      locale: options.locale,
+      timezoneId: options.timezoneId,
+    };
+
     // Use persistent context if userDataDir is provided
     if (options.userDataDir) {
       this.isPersistentContext = true;
       const context = await browserTypeInstance.launchPersistentContext(options.userDataDir, {
         headless: options.headless ?? true,
-        viewport: options.viewport ?? { width: 1280, height: 720 },
+        ...contextOptions,
         executablePath: options.executablePath,
         args: launchArgs.length > 0 ? launchArgs : undefined,
-        proxy: options.proxy,
         slowMo: options.slowMo,
-        extraHTTPHeaders: options.headers,
         timeout: options.timeout,
       });
+
+      // Inject stealth scripts if enabled
+      if (stealthEnabled) {
+        await this.injectStealthScripts(context);
+      }
 
       this.contexts.push(context);
       this.pages = context.pages();
@@ -178,11 +241,12 @@ export class BrowserManager {
       });
 
       // Create default context with options
-      const context = await this.browser.newContext({
-        viewport: options.viewport ?? { width: 1280, height: 720 },
-        proxy: options.proxy,
-        extraHTTPHeaders: options.headers,
-      });
+      const context = await this.browser.newContext(contextOptions);
+
+      // Inject stealth scripts if enabled
+      if (stealthEnabled) {
+        await this.injectStealthScripts(context);
+      }
 
       this.contexts.push(context);
       const page = await context.newPage();
@@ -192,6 +256,90 @@ export class BrowserManager {
 
     this.activePageIndex = 0;
     this.activeFrame = null;
+  }
+
+  /**
+   * Inject stealth scripts to avoid bot detection (from browser-use)
+   * - Removes webdriver flag
+   * - Patches navigator.permissions
+   * - Fixes isTrusted event property for React/Vue
+   */
+  private async injectStealthScripts(context: BrowserContext): Promise<void> {
+    await context.addInitScript(() => {
+      // Remove webdriver flag
+      Object.defineProperty(navigator, 'webdriver', {
+        get: () => undefined,
+      });
+
+      // Override permissions query
+      const originalQuery = window.navigator.permissions.query;
+      window.navigator.permissions.query = (parameters: any) =>
+        parameters.name === 'notifications'
+          ? Promise.resolve({ state: Notification.permission } as PermissionStatus)
+          : originalQuery(parameters);
+
+      // Override plugins and mimeTypes to appear as a regular browser
+      Object.defineProperty(navigator, 'plugins', {
+        get: () => [
+          { name: 'Chrome PDF Plugin', filename: 'internal-pdf-viewer' },
+          { name: 'Chrome PDF Viewer', filename: 'mhjfbmdgcfjbbpaeojofohoefgiehjai' },
+          { name: 'Native Client', filename: 'internal-nacl-plugin' },
+        ],
+      });
+
+      Object.defineProperty(navigator, 'mimeTypes', {
+        get: () => [
+          { type: 'application/pdf', suffixes: 'pdf', description: 'Portable Document Format' },
+          { type: 'application/x-google-chrome-pdf', suffixes: 'pdf', description: 'Portable Document Format' },
+        ],
+      });
+
+      // Override languages
+      Object.defineProperty(navigator, 'languages', {
+        get: () => ['en-US', 'en'],
+      });
+
+      // Fix for isTrusted property (React/Vue detection)
+      // This makes programmatic events appear as user-initiated
+      const originalDispatchEvent = EventTarget.prototype.dispatchEvent;
+      EventTarget.prototype.dispatchEvent = function(event: Event) {
+        // For input events, we need them to look trusted
+        if (event.type === 'input' || event.type === 'change' || event.type === 'click') {
+          Object.defineProperty(event, 'isTrusted', { get: () => true });
+        }
+        return originalDispatchEvent.call(this, event);
+      };
+
+      // Override chrome.runtime to avoid detection
+      const win = window as any;
+      if (!win.chrome) {
+        win.chrome = {};
+      }
+      if (!win.chrome.runtime) {
+        win.chrome.runtime = {};
+      }
+
+      // Hide automation-related objects
+      delete (window as any).__webdriver_script_fn;
+      delete (window as any).__driver_evaluate;
+      delete (window as any).__webdriver_evaluate;
+      delete (window as any).__selenium_evaluate;
+      delete (window as any).__fxdriver_evaluate;
+      delete (window as any).__driver_unwrapped;
+      delete (window as any).__webdriver_unwrapped;
+      delete (window as any).__selenium_unwrapped;
+      delete (window as any).__fxdriver_unwrapped;
+
+      // Override hardware concurrency to seem like a real machine
+      Object.defineProperty(navigator, 'hardwareConcurrency', {
+        get: () => 8,
+      });
+
+      // Override device memory
+      Object.defineProperty(navigator, 'deviceMemory', {
+        get: () => 8,
+      });
+    });
   }
 
   /**

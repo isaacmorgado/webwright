@@ -1,0 +1,232 @@
+#!/usr/bin/env node
+
+/**
+ * AgentBrowser Pro CLI Entry Point
+ * This is a Node.js wrapper that will be replaced by the Rust CLI for production
+ */
+
+import { spawn } from 'child_process';
+import { existsSync } from 'fs';
+import { dirname, join } from 'path';
+import { fileURLToPath } from 'url';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+
+// Check for native binary first
+const nativeBinary = join(__dirname, process.platform === 'win32' ? 'agentbrowser-pro.exe' : 'agentbrowser-pro-native');
+
+if (existsSync(nativeBinary)) {
+  // Use native Rust binary
+  const proc = spawn(nativeBinary, process.argv.slice(2), {
+    stdio: 'inherit',
+    env: process.env,
+  });
+
+  proc.on('exit', (code) => {
+    process.exit(code ?? 0);
+  });
+} else {
+  // Fall back to Node.js implementation
+  (async () => {
+    const { startDaemon, sendCommand, isDaemonRunning } = await import('../dist/index.js');
+
+    const args = process.argv.slice(2);
+    const command = args[0];
+
+    // Parse global flags
+    const flags = {
+      json: args.includes('--json'),
+      session: args.find((a) => a.startsWith('--session='))?.split('=')[1] ?? 'default',
+      headed: args.includes('--headed'),
+      help: args.includes('--help') || args.includes('-h'),
+    };
+
+    // Remove flags from args
+    const cleanArgs = args.filter(
+      (a) => !a.startsWith('--') && !a.startsWith('-h')
+    );
+
+    if (flags.help || !command) {
+      console.log(`
+AgentBrowser Pro - Browser automation for AI agents
+
+Usage: agentbrowser-pro <command> [options]
+
+Commands:
+  daemon              Start the browser daemon
+  navigate <url>      Navigate to a URL
+  snapshot            Get accessibility tree with refs
+  click <selector>    Click an element
+  type <selector> <text>  Type text into an element
+  fill <selector> <value>  Fill an input field
+  screenshot [path]   Take a screenshot
+  mcp                 Start MCP server
+
+Options:
+  --session=<name>   Use named session (default: "default")
+  --headed           Run browser in headed mode
+  --json             Output results as JSON
+  --help, -h         Show this help message
+
+Examples:
+  agentbrowser-pro navigate https://example.com
+  agentbrowser-pro snapshot --json
+  agentbrowser-pro click @e1
+  agentbrowser-pro fill @e2 "hello@example.com"
+`);
+      process.exit(0);
+    }
+
+    try {
+      // Handle daemon command
+      if (command === 'daemon') {
+        console.log(`Starting AgentBrowser Pro daemon (session: ${flags.session})...`);
+        await startDaemon({
+          session: flags.session,
+          headed: flags.headed,
+        });
+        // Daemon runs indefinitely
+        return;
+      }
+
+      // Handle MCP server command
+      if (command === 'mcp') {
+        const { MCPServer } = await import('../dist/mcp/server.js');
+        const server = new MCPServer();
+        console.log('MCP Server started. Listening for commands on stdin...');
+
+        // Simple stdio MCP transport
+        process.stdin.setEncoding('utf8');
+        let buffer = '';
+
+        process.stdin.on('data', async (chunk) => {
+          buffer += chunk;
+          const lines = buffer.split('\n');
+          buffer = lines.pop() ?? '';
+
+          for (const line of lines) {
+            if (!line.trim()) continue;
+            try {
+              const request = JSON.parse(line);
+              let result;
+
+              if (request.method === 'tools/list') {
+                result = { tools: server.getTools() };
+              } else if (request.method === 'tools/call') {
+                result = await server.executeTool(request.params.name, request.params.arguments);
+              } else if (request.method === 'resources/list') {
+                result = { resources: server.getResources() };
+              } else if (request.method === 'resources/read') {
+                result = await server.readResource(request.params.uri);
+              } else if (request.method === 'prompts/list') {
+                result = { prompts: server.getPrompts() };
+              } else if (request.method === 'prompts/get') {
+                result = { prompt: await server.getPrompt(request.params.name, request.params.arguments) };
+              } else {
+                result = { error: `Unknown method: ${request.method}` };
+              }
+
+              console.log(JSON.stringify({ id: request.id, result }));
+            } catch (err) {
+              console.log(JSON.stringify({ error: err.message }));
+            }
+          }
+        });
+
+        return;
+      }
+
+      // Ensure daemon is running
+      if (!isDaemonRunning(flags.session)) {
+        // Auto-start daemon
+        console.error(`Starting daemon for session "${flags.session}"...`);
+
+        const daemonProc = spawn(process.argv[0], [process.argv[1], 'daemon', `--session=${flags.session}`, flags.headed ? '--headed' : ''].filter(Boolean), {
+          detached: true,
+          stdio: 'ignore',
+          env: {
+            ...process.env,
+            AGENT_BROWSER_DAEMON: '1',
+            AGENT_BROWSER_SESSION: flags.session,
+            AGENT_BROWSER_HEADED: flags.headed ? '1' : '0',
+          },
+        });
+        daemonProc.unref();
+
+        // Wait for daemon to be ready
+        for (let i = 0; i < 50; i++) {
+          await new Promise((r) => setTimeout(r, 100));
+          if (isDaemonRunning(flags.session)) break;
+        }
+      }
+
+      // Build command JSON
+      let cmdJson;
+      switch (command) {
+        case 'navigate':
+          cmdJson = { id: '1', action: 'navigate', url: cleanArgs[1] };
+          break;
+        case 'snapshot':
+          cmdJson = { id: '1', action: 'snapshot', interactive: true };
+          break;
+        case 'click':
+          cmdJson = { id: '1', action: 'click', selector: cleanArgs[1] };
+          break;
+        case 'type':
+          cmdJson = { id: '1', action: 'type', selector: cleanArgs[1], text: cleanArgs.slice(2).join(' ') };
+          break;
+        case 'fill':
+          cmdJson = { id: '1', action: 'fill', selector: cleanArgs[1], value: cleanArgs.slice(2).join(' ') };
+          break;
+        case 'screenshot':
+          cmdJson = { id: '1', action: 'screenshot', path: cleanArgs[1] };
+          break;
+        case 'close':
+          cmdJson = { id: '1', action: 'close' };
+          break;
+        default:
+          // Try to parse as JSON command
+          try {
+            cmdJson = JSON.parse(args.join(' '));
+            if (!cmdJson.id) cmdJson.id = '1';
+          } catch {
+            console.error(`Unknown command: ${command}`);
+            process.exit(1);
+          }
+      }
+
+      // Send command
+      const response = await sendCommand(JSON.stringify(cmdJson), flags.session);
+
+      // Output result
+      if (flags.json) {
+        console.log(JSON.stringify(response, null, 2));
+      } else if (response.success) {
+        if (response.result) {
+          if (typeof response.result === 'string') {
+            console.log(response.result);
+          } else if (response.result.tree) {
+            // Snapshot result
+            console.log(response.result.tree);
+            console.log(`\nURL: ${response.result.url}`);
+            console.log(`Title: ${response.result.title}`);
+          } else {
+            console.log(JSON.stringify(response.result, null, 2));
+          }
+        } else {
+          console.log('✓ Success');
+        }
+      } else {
+        console.error(`✗ ${response.error}`);
+        process.exit(1);
+      }
+    } catch (err) {
+      if (flags.json) {
+        console.log(JSON.stringify({ success: false, error: err.message }));
+      } else {
+        console.error(`✗ ${err.message}`);
+      }
+      process.exit(1);
+    }
+  })();
+}

@@ -1,0 +1,70 @@
+{
+  "name": "@anthropic/agentbrowser-pro",
+  "version": "1.0.0",
+  "description": "Next-generation browser automation framework for AI agents - combining the best of agent-browser and browser-use",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "agentbrowser-pro": "./bin/agentbrowser-pro"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./mcp": {
+      "types": "./dist/mcp/server.d.ts",
+      "import": "./dist/mcp/server.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "build:watch": "tsc --watch",
+    "build:native": "cd cli && cargo build --release && cp target/release/agentbrowser-pro ../bin/",
+    "build:all": "npm run build && npm run build:native",
+    "dev": "tsx src/daemon.ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "prettier --check src/",
+    "format": "prettier --write src/",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf dist",
+    "prepublishOnly": "npm run build:all"
+  },
+  "keywords": [
+    "browser",
+    "automation",
+    "ai",
+    "agent",
+    "playwright",
+    "mcp",
+    "claude",
+    "web-scraping"
+  ],
+  "author": "Anthropic",
+  "license": "Apache-2.0",
+  "dependencies": {
+    "playwright-core": "^1.52.0",
+    "ws": "^8.19.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@types/ws": "^8.5.14",
+    "playwright": "^1.52.0",
+    "prettier": "^3.4.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0",
+    "vitest": "^3.0.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "files": [
+    "dist/",
+    "bin/",
+    "README.md",
+    "LICENSE"
+  ]
+}

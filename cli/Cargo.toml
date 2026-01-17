@@ -1,0 +1,27 @@
+[package]
+name = "agentbrowser-pro"
+version = "1.0.0"
+edition = "2021"
+authors = ["Anthropic"]
+description = "Fast CLI for AgentBrowser Pro browser automation"
+license = "Apache-2.0"
+repository = "https://github.com/anthropics/agentbrowser-pro"
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.52", features = ["Win32_System_Threading", "Win32_Foundation"] }
+
+[[bin]]
+name = "agentbrowser-pro"
+path = "src/main.rs"
+
+[profile.release]
+opt-level = 3
+lto = true
+strip = true

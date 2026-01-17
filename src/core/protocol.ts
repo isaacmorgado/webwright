@@ -837,6 +837,64 @@ const scrollIntoViewSchema = baseCommandSchema.extend({
 });
 
 // ============================================================================
+// Tier 3: Web Search (from browser-use)
+// ============================================================================
+
+const searchSchema = baseCommandSchema.extend({
+  action: z.literal('search'),
+  query: z.string(),
+  engine: z.enum(['duckduckgo', 'google', 'bing']).optional().default('duckduckgo'),
+});
+
+// ============================================================================
+// Tier 3: Data Extraction (from browser-use)
+// ============================================================================
+
+const extractSchema = baseCommandSchema.extend({
+  action: z.literal('extract'),
+  goal: z.string().describe('What data to extract from the page'),
+  schema: z.record(z.any()).optional().describe('Optional JSON schema for structured extraction'),
+  maxLength: z.number().optional().default(60000).describe('Max characters to return'),
+});
+
+// ============================================================================
+// Tier 3: Dropdown Options Retrieval (from browser-use)
+// ============================================================================
+
+const getDropdownOptionsSchema = baseCommandSchema.extend({
+  action: z.literal('getDropdownOptions'),
+  selector: z.string(),
+});
+
+// ============================================================================
+// Tier 3: Pagination Detection (from browser-use)
+// ============================================================================
+
+const detectPaginationSchema = baseCommandSchema.extend({
+  action: z.literal('detectPagination'),
+});
+
+// ============================================================================
+// Tier 3: Find Text on Page (from browser-use)
+// ============================================================================
+
+const findTextOnPageSchema = baseCommandSchema.extend({
+  action: z.literal('findTextOnPage'),
+  text: z.string(),
+  caseSensitive: z.boolean().optional().default(false),
+});
+
+// ============================================================================
+// Tier 3: PDF Download (from browser-use)
+// ============================================================================
+
+const downloadPdfSchema = baseCommandSchema.extend({
+  action: z.literal('downloadPdf'),
+  url: z.string().url().optional(),
+  path: z.string(),
+});
+
+// ============================================================================
 // Tier 3: Network Request Viewing
 // ============================================================================
 
@@ -1004,6 +1062,13 @@ export const commandSchema = z.discriminatedUnion('action', [
   // Tier 3: New Window Management
   newWindowSchema,
   bringToFrontSchema,
+  // Tier 3: Browser-Use Features
+  searchSchema,
+  extractSchema,
+  getDropdownOptionsSchema,
+  detectPaginationSchema,
+  findTextOnPageSchema,
+  downloadPdfSchema,
 ]);
 
 export type Command = z.infer<typeof commandSchema>;

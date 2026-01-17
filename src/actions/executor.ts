@@ -1009,6 +1009,363 @@ export class ActionExecutor {
         await this.browser.getPage().bringToFront();
         return { focused: true };
 
+      // ============ Tier 3: Browser-Use Features ============
+
+      // Web Search (from browser-use)
+      case 'search': {
+        const searchUrls: Record<string, string> = {
+          duckduckgo: 'https://duckduckgo.com/?q=',
+          google: 'https://www.google.com/search?q=',
+          bing: 'https://www.bing.com/search?q=',
+        };
+        const engineUrl = searchUrls[command.engine ?? 'duckduckgo'];
+        const searchUrl = engineUrl + encodeURIComponent(command.query);
+        await this.browser.getPage().goto(searchUrl, { waitUntil: 'domcontentloaded' });
+        return {
+          searched: command.query,
+          engine: command.engine ?? 'duckduckgo',
+          url: searchUrl,
+        };
+      }
+
+      // Data Extraction (from browser-use)
+      case 'extract': {
+        // Get page content as markdown-like text
+        const pageContent = await this.browser.getPage().evaluate(() => {
+          const getText = (element: Element): string => {
+            const tagName = element.tagName.toLowerCase();
+
+            // Skip hidden elements
+            const style = window.getComputedStyle(element);
+            if (style.display === 'none' || style.visibility === 'hidden') {
+              return '';
+            }
+
+            // Handle specific elements
+            if (tagName === 'script' || tagName === 'style' || tagName === 'noscript') {
+              return '';
+            }
+
+            // Handle headings
+            if (/^h[1-6]$/.test(tagName)) {
+              const level = tagName.charAt(1);
+              const text = element.textContent?.trim() || '';
+              return text ? '\n' + '#'.repeat(parseInt(level)) + ' ' + text + '\n' : '';
+            }
+
+            // Handle paragraphs
+            if (tagName === 'p') {
+              const text = element.textContent?.trim() || '';
+              return text ? '\n' + text + '\n' : '';
+            }
+
+            // Handle list items
+            if (tagName === 'li') {
+              const text = element.textContent?.trim() || '';
+              return text ? '- ' + text + '\n' : '';
+            }
+
+            // Handle links
+            if (tagName === 'a') {
+              const text = element.textContent?.trim() || '';
+              const href = element.getAttribute('href') || '';
+              return text ? `[${text}](${href})` : '';
+            }
+
+            // Handle images
+            if (tagName === 'img') {
+              const alt = element.getAttribute('alt') || '';
+              return alt ? `[Image: ${alt}]` : '';
+            }
+
+            // Handle tables
+            if (tagName === 'table') {
+              const rows = element.querySelectorAll('tr');
+              let tableText = '\n';
+              rows.forEach((row, i) => {
+                const cells = row.querySelectorAll('th, td');
+                const cellTexts = Array.from(cells).map(c => c.textContent?.trim() || '');
+                tableText += '| ' + cellTexts.join(' | ') + ' |\n';
+                if (i === 0) {
+                  tableText += '| ' + cellTexts.map(() => '---').join(' | ') + ' |\n';
+                }
+              });
+              return tableText;
+            }
+
+            // Recursively get text from children
+            let text = '';
+            for (const child of Array.from(element.childNodes)) {
+              if (child.nodeType === Node.TEXT_NODE) {
+                const nodeText = child.textContent?.trim() || '';
+                if (nodeText) text += nodeText + ' ';
+              } else if (child.nodeType === Node.ELEMENT_NODE) {
+                text += getText(child as Element);
+              }
+            }
+            return text;
+          };
+
+          return getText(document.body);
+        });
+
+        // Truncate to max length with smart boundary detection
+        let content = pageContent.trim();
+        const maxLength = command.maxLength ?? 60000;
+
+        if (content.length > maxLength) {
+          // Find sentence boundary near max length
+          const truncateAt = content.lastIndexOf('.', maxLength);
+          if (truncateAt > maxLength * 0.8) {
+            content = content.substring(0, truncateAt + 1);
+          } else {
+            // Find paragraph boundary
+            const paragraphAt = content.lastIndexOf('\n\n', maxLength);
+            if (paragraphAt > maxLength * 0.7) {
+              content = content.substring(0, paragraphAt);
+            } else {
+              content = content.substring(0, maxLength) + '... [truncated]';
+            }
+          }
+        }
+
+        return {
+          goal: command.goal,
+          content: content,
+          length: content.length,
+          truncated: pageContent.length > maxLength,
+          originalLength: pageContent.length,
+          note: 'Use an LLM to extract structured data from this content based on the goal',
+        };
+      }
+
+      // Get Dropdown Options (from browser-use)
+      case 'getDropdownOptions': {
+        const locator = this.browser.getLocator(command.selector);
+        const tagName = await locator.evaluate(el => el.tagName.toLowerCase());
+
+        if (tagName === 'select') {
+          // Native HTML select
+          const options = await locator.evaluate((select: HTMLSelectElement) => {
+            return Array.from(select.options).map((opt, i) => ({
+              index: i,
+              value: opt.value,
+              text: opt.text,
+              selected: opt.selected,
+              disabled: opt.disabled,
+            }));
+          });
+          return { options, type: 'select', count: options.length };
+        } else {
+          // ARIA listbox/menu - look for options within
+          const options = await locator.evaluate((el) => {
+            const items = el.querySelectorAll('[role="option"], [role="menuitem"], li');
+            return Array.from(items).map((item, i) => ({
+              index: i,
+              text: item.textContent?.trim() || '',
+              value: item.getAttribute('data-value') || item.getAttribute('value') || '',
+              selected: item.getAttribute('aria-selected') === 'true',
+              disabled: item.getAttribute('aria-disabled') === 'true',
+            }));
+          });
+          return { options, type: 'aria', count: options.length };
+        }
+      }
+
+      // Pagination Detection (from browser-use)
+      case 'detectPagination': {
+        const paginationInfo = await this.browser.getPage().evaluate(() => {
+          const paginationPatterns = {
+            next: [
+              'next', 'siguiente', 'próximo', 'weiter', 'suivant', '下一页', '次へ',
+              '→', '>>', '›', 'forward', 'more',
+            ],
+            prev: [
+              'prev', 'previous', 'anterior', 'zurück', 'précédent', '上一页', '前へ',
+              '←', '<<', '‹', 'back',
+            ],
+          };
+
+          const findPaginationButtons = (type: 'next' | 'prev') => {
+            const patterns = paginationPatterns[type];
+            const results: Array<{
+              text: string;
+              selector: string;
+              disabled: boolean;
+              ariaLabel?: string;
+            }> = [];
+
+            // Check links and buttons
+            const elements = document.querySelectorAll('a, button, [role="button"]');
+
+            for (const el of Array.from(elements)) {
+              const text = el.textContent?.toLowerCase().trim() || '';
+              const ariaLabel = el.getAttribute('aria-label')?.toLowerCase() || '';
+              const className = el.className?.toLowerCase() || '';
+
+              const matchesPattern = patterns.some(p =>
+                text.includes(p) || ariaLabel.includes(p) || className.includes(p)
+              );
+
+              if (matchesPattern) {
+                // Generate a selector
+                let selector = el.tagName.toLowerCase();
+                if (el.id) selector += `#${el.id}`;
+                else if (el.className) selector += `.${el.className.split(' ')[0]}`;
+
+                results.push({
+                  text: el.textContent?.trim() || '',
+                  selector: selector,
+                  disabled: el.hasAttribute('disabled') || el.getAttribute('aria-disabled') === 'true',
+                  ariaLabel: el.getAttribute('aria-label') || undefined,
+                });
+              }
+            }
+
+            return results;
+          };
+
+          // Find page number buttons
+          const pageNumbers: Array<{ number: number; selector: string; current: boolean }> = [];
+          const pageLinks = document.querySelectorAll('a, button');
+
+          for (const el of Array.from(pageLinks)) {
+            const text = el.textContent?.trim() || '';
+            if (/^\d+$/.test(text) && parseInt(text) <= 100) {
+              const num = parseInt(text);
+              let selector = el.tagName.toLowerCase();
+              if (el.id) selector += `#${el.id}`;
+
+              pageNumbers.push({
+                number: num,
+                selector: selector,
+                current: el.getAttribute('aria-current') === 'page' ||
+                         el.classList.contains('active') ||
+                         el.classList.contains('current'),
+              });
+            }
+          }
+
+          return {
+            next: findPaginationButtons('next'),
+            prev: findPaginationButtons('prev'),
+            pageNumbers: pageNumbers.sort((a, b) => a.number - b.number),
+            currentPage: pageNumbers.find(p => p.current)?.number,
+          };
+        });
+
+        return {
+          ...paginationInfo,
+          hasPagination: paginationInfo.next.length > 0 || paginationInfo.prev.length > 0 || paginationInfo.pageNumbers.length > 0,
+        };
+      }
+
+      // Find Text on Page (from browser-use)
+      case 'findTextOnPage': {
+        const matches = await this.browser.getPage().evaluate((opts: { text: string; caseSensitive: boolean }) => {
+          const searchText = opts.caseSensitive ? opts.text : opts.text.toLowerCase();
+          const results: Array<{
+            text: string;
+            context: string;
+            tagName: string;
+            xpath: string;
+          }> = [];
+
+          const walker = document.createTreeWalker(
+            document.body,
+            NodeFilter.SHOW_TEXT,
+            null
+          );
+
+          let node: Node | null;
+          while ((node = walker.nextNode())) {
+            const nodeText = node.textContent || '';
+            const compareText = opts.caseSensitive ? nodeText : nodeText.toLowerCase();
+
+            if (compareText.includes(searchText)) {
+              const parent = node.parentElement;
+              if (parent) {
+                // Get surrounding context (50 chars before and after)
+                const fullText = nodeText;
+                const index = compareText.indexOf(searchText);
+                const start = Math.max(0, index - 50);
+                const end = Math.min(fullText.length, index + opts.text.length + 50);
+                const context = (start > 0 ? '...' : '') +
+                               fullText.substring(start, end) +
+                               (end < fullText.length ? '...' : '');
+
+                // Generate xpath
+                const getXPath = (el: Element): string => {
+                  if (el.id) return `//*[@id="${el.id}"]`;
+                  const parts: string[] = [];
+                  let current: Element | null = el;
+                  while (current && current !== document.body) {
+                    let index = 1;
+                    let sibling = current.previousElementSibling;
+                    while (sibling) {
+                      if (sibling.tagName === current.tagName) index++;
+                      sibling = sibling.previousElementSibling;
+                    }
+                    parts.unshift(`${current.tagName.toLowerCase()}[${index}]`);
+                    current = current.parentElement;
+                  }
+                  return '//' + parts.join('/');
+                };
+
+                results.push({
+                  text: opts.text,
+                  context: context.trim(),
+                  tagName: parent.tagName.toLowerCase(),
+                  xpath: getXPath(parent),
+                });
+              }
+            }
+          }
+
+          return results;
+        }, { text: command.text, caseSensitive: command.caseSensitive ?? false });
+
+        return {
+          found: matches.length > 0,
+          count: matches.length,
+          matches: matches.slice(0, 20), // Limit to first 20 matches
+        };
+      }
+
+      // PDF Download (from browser-use)
+      case 'downloadPdf': {
+        const fs = await import('fs');
+        const pathModule = await import('path');
+        const currentPage = this.browser.getPage();
+
+        if (command.url) {
+          // Navigate to PDF URL and download
+          const response = await currentPage.goto(command.url, { waitUntil: 'load' });
+          if (response) {
+            const contentType = response.headers()['content-type'] || '';
+            if (contentType.includes('pdf')) {
+              const buffer = await response.body();
+              await fs.promises.mkdir(pathModule.dirname(command.path), { recursive: true });
+              await fs.promises.writeFile(command.path, buffer);
+              return { downloaded: true, path: command.path, size: buffer.length };
+            }
+          }
+        }
+
+        // Generate PDF from current page
+        const pdfBuffer = await currentPage.pdf({
+          path: command.path,
+          format: 'A4',
+          printBackground: true,
+        });
+
+        return {
+          generated: true,
+          path: command.path,
+          size: pdfBuffer.length,
+        };
+      }
+
       default:
         throw new Error(`Unknown action: ${(command as any).action}`);
     }

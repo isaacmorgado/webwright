@@ -18,7 +18,7 @@ This document compares WebWright features against agent-browser and browser-use 
 | Go back | ✅ | ✅ | ✅ |
 | Go forward | ✅ | ✅ | ✅ |
 | Reload | ✅ | ✅ | ✅ |
-| Search (Google/Bing/DDG) | ❌ | ❌ | ✅ |
+| Search (Google/Bing/DDG) | ✅ | ❌ | ✅ |
 
 ---
 
@@ -53,8 +53,8 @@ This document compares WebWright features against agent-browser and browser-use 
 |---------|-----------|---------------|-------------|
 | Scroll page | ✅ | ✅ | ✅ |
 | Scroll element | ✅ | ✅ | ✅ |
-| Scroll into view | ❌ | ✅ | ❌ |
-| Find text (scroll to) | ❌ | ❌ | ✅ |
+| Scroll into view | ✅ | ✅ | ❌ |
+| Find text (scroll to) | ✅ | ❌ | ✅ |
 
 ---
 
@@ -81,7 +81,11 @@ This document compares WebWright features against agent-browser and browser-use 
 | Get URL | ✅ | ✅ | ❌ |
 | Get count | ✅ | ✅ | ❌ |
 | Get bounding box | ✅ | ✅ | ✅ |
-| Get page content | ❌ | ✅ | ✅ |
+| Get page content | ✅ | ✅ | ✅ |
+| Extract data (AI) | ✅ | ❌ | ✅ |
+| Detect pagination | ✅ | ❌ | ✅ |
+| Get dropdown options | ✅ | ❌ | ✅ |
+| Detect input variables | ✅ | ❌ | ✅ |
 
 ---
 
@@ -296,14 +300,37 @@ This document compares WebWright features against agent-browser and browser-use 
 | Agent run | ✅ | ❌ | ✅ |
 | Agent step | ✅ | ❌ | ✅ |
 | Multi-LLM support | ❌ | ❌ | ✅ |
-| Vision support | ❌ | ❌ | ✅ |
+| Vision support | ✅ | ❌ | ✅ |
 | Memory system | ❌ | ❌ | ✅ |
 | Evaluation/judge | ❌ | ❌ | ✅ |
 | Thinking mode | ❌ | ❌ | ✅ |
 | Token tracking | ❌ | ❌ | ✅ |
 | Skills system | ❌ | ❌ | ✅ |
-| Sensitive data handling | ❌ | ❌ | ✅ |
+| Sensitive data handling | ✅ | ❌ | ✅ |
 | Custom tools | ❌ | ❌ | ✅ |
+
+---
+
+## Human-Like Interactions
+
+| Feature | WebWright | agent-browser | browser-use |
+|---------|-----------|---------------|-------------|
+| Human-like click (jitter) | ✅ | ❌ | ✅ |
+| Human timing delays | ✅ | ❌ | ✅ |
+| Multi-strategy clear | ✅ | ❌ | ✅ |
+| Stealth mode | ✅ | ❌ | ✅ |
+| Anti-detection patches | ✅ | ❌ | ✅ |
+
+---
+
+## Health & Monitoring
+
+| Feature | WebWright | agent-browser | browser-use |
+|---------|-----------|---------------|-------------|
+| Health check/watchdog | ✅ | ❌ | ✅ |
+| Network state monitoring | ✅ | ❌ | ✅ |
+| Console error detection | ✅ | ❌ | ✅ |
+| Page responsiveness check | ✅ | ❌ | ✅ |
 
 ---
 
@@ -350,7 +377,7 @@ This document compares WebWright features against agent-browser and browser-use 
 
 ### Implemented from browser-use (AI-focused):
 1. ✅ **Vision support** - Screenshot analysis (returns base64 + prompt)
-2. 🔶 **LLM data extraction** - Via evaluate command
+2. ✅ **LLM data extraction** - `extract` action for AI-driven content extraction
 3. ✅ **Sensitive data handling** - Placeholder replacement system
 4. ❌ **Memory system** - Not implemented (handled by Claude)
 5. ❌ **Evaluation/judge** - Not implemented (handled by Claude)
@@ -359,6 +386,16 @@ This document compares WebWright features against agent-browser and browser-use 
 8. ✅ **Element highlighting** - Demo mode with labels
 9. ❌ **Skills system** - Not implemented (use MCP)
 10. ❌ **Custom tools** - Not implemented (use MCP)
+11. ✅ **Search action** - Navigate to search engines with query (DuckDuckGo, Google, Bing)
+12. ✅ **Pagination detection** - Auto-detect next/prev buttons and page numbers
+13. ✅ **Dropdown options** - Get options from select elements and ARIA listboxes
+14. ✅ **Find text on page** - Search for text with context and XPath
+15. ✅ **PDF download** - Download PDFs or generate from current page
+16. ✅ **Human-like click** - Jitter, timing delays, scroll-into-view behavior
+17. ✅ **Detect variables** - Auto-detect input field types (email, phone, etc.)
+18. ✅ **Health check** - Monitor network, console errors, page responsiveness
+19. ✅ **Multi-clear** - 4 fallback strategies with framework event triggering
+20. ✅ **Stealth mode** - Anti-detection patches for navigator/webdriver
 
 ---
 

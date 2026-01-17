@@ -540,6 +540,138 @@ mindmap
 
 ---
 
+## Advanced Features
+
+WebWright includes advanced browser automation features adapted from browser-use for AI-powered workflows.
+
+### Human-Like Interactions
+
+**Human Click** - Mimics human clicking behavior with jitter and timing delays:
+
+```typescript
+// Human-like click with random position jitter and realistic timing
+await executor.execute({
+  id: 'human-1',
+  action: 'humanClick',
+  selector: 'button#submit',
+  jitter: 3,                    // Random offset in pixels
+  preDelay: [30, 80],          // Wait 30-80ms before click
+  postDelay: [50, 150],        // Wait 50-150ms after click
+});
+```
+
+**Multi-Strategy Clear** - Clears input fields using 4 fallback strategies:
+
+```typescript
+// Try multiple strategies to clear a field
+await executor.execute({
+  id: 'clear-1',
+  action: 'multiClear',
+  selector: 'input#email',
+  triggerFrameworkEvents: true,  // Trigger React/Vue/Angular events
+});
+// Strategies: 1) Playwright clear, 2) Triple-click+Delete,
+// 3) Ctrl+A+Delete, 4) JS fallback with events
+```
+
+### AI-Powered Data Extraction
+
+**Extract Content** - Extract structured data from pages:
+
+```typescript
+await executor.execute({
+  id: 'extract-1',
+  action: 'extract',
+  goal: 'Get all product names and prices',
+  maxLength: 60000,
+});
+// Returns markdown-formatted page content for LLM processing
+```
+
+**Detect Input Variables** - Auto-detect form field types:
+
+```typescript
+await executor.execute({
+  id: 'detect-1',
+  action: 'detectVariables',
+  selector: 'form#checkout',  // Optional: scope to specific form
+});
+// Returns: email, phone, password, date, credit card, etc.
+```
+
+### Navigation Helpers
+
+**Search** - Navigate to search engines with query:
+
+```typescript
+await executor.execute({
+  id: 'search-1',
+  action: 'search',
+  query: 'playwright automation',
+  engine: 'duckduckgo',  // or 'google', 'bing'
+});
+```
+
+**Detect Pagination** - Find pagination controls automatically:
+
+```typescript
+await executor.execute({
+  id: 'paginate-1',
+  action: 'detectPagination',
+});
+// Returns: { next: [...], prev: [...], pageNumbers: [...], currentPage: 2 }
+```
+
+**Find Text on Page** - Locate text with context:
+
+```typescript
+await executor.execute({
+  id: 'find-1',
+  action: 'findTextOnPage',
+  text: 'Terms of Service',
+  caseSensitive: false,
+});
+// Returns matches with surrounding context and XPath selectors
+```
+
+### Health Monitoring
+
+**Health Check** - Monitor page health status:
+
+```typescript
+await executor.execute({
+  id: 'health-1',
+  action: 'healthCheck',
+  checkNetwork: true,      // Check for pending requests
+  checkConsole: true,      // Check for console errors
+  checkResponsive: true,   // Check if page responds
+  timeout: 5000,
+});
+// Returns: { healthy: true/false, issues: [...], network: {...}, console: {...} }
+```
+
+### Stealth Mode
+
+WebWright includes stealth mode for anti-detection when automating websites:
+
+```typescript
+await browser.launch({
+  headless: true,
+  stealth: true,  // Enable stealth mode (enabled by default)
+});
+```
+
+**Stealth features include:**
+- Navigator webdriver flag patching
+- Chrome runtime object injection
+- Permissions API masking
+- Plugin array population
+- Language detection patching
+- WebGL vendor masking
+- Stealth Chrome launch arguments
+
+---
+
 ## Prompting Guide
 
 ### Effective Prompts

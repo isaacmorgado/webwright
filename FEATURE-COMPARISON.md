@@ -39,7 +39,7 @@ This document compares WebWright features against agent-browser and browser-use 
 | Check checkbox | ✅ | ✅ | ❌ |
 | Uncheck checkbox | ✅ | ✅ | ❌ |
 | Select dropdown | ✅ | ✅ | ✅ |
-| Multi-select | ❌ | ✅ | ❌ |
+| Multi-select | ✅ | ✅ | ❌ |
 | Tap (mobile) | ❌ | ✅ | ❌ |
 | Drag and drop | ✅ | ✅ | ❌ |
 | Upload file | ✅ | ✅ | ✅ |
@@ -107,10 +107,10 @@ This document compares WebWright features against agent-browser and browser-use 
 |---------|-----------|---------------|-------------|
 | Wait (timeout) | ✅ | ✅ | ✅ |
 | Wait for selector | ✅ | ✅ | ❌ |
-| Wait for text | ❌ | ✅ | ❌ |
-| Wait for URL | ❌ | ✅ | ❌ |
+| Wait for text | ✅ | ✅ | ❌ |
+| Wait for URL | ✅ | ✅ | ❌ |
 | Wait for load state | ✅ | ✅ | ❌ |
-| Wait for function | ❌ | ✅ | ❌ |
+| Wait for function | ✅ | ✅ | ❌ |
 | Wait for download | ❌ | ✅ | ❌ |
 | Wait for navigation | ✅ | ❌ | ❌ |
 
@@ -123,11 +123,11 @@ This document compares WebWright features against agent-browser and browser-use 
 | Accessibility tree | ✅ | ✅ | ✅ |
 | Ref-based targeting | ✅ | ✅ | ✅ (index) |
 | Interactive-only filter | ✅ | ✅ | ❌ |
-| Compact mode | ❌ | ✅ | ❌ |
-| Depth limiting | ❌ | ✅ | ❌ |
-| Selector scoping | ❌ | ✅ | ❌ |
+| Compact mode | ✅ | ✅ | ❌ |
+| Depth limiting | ✅ | ✅ | ❌ |
+| Selector scoping | ✅ | ✅ | ❌ |
 | Markdown extraction | ✅ | ❌ | ✅ |
-| LLM data extraction | ❌ | ❌ | ✅ |
+| LLM data extraction | ✅ | ❌ | ✅ |
 
 ---
 
@@ -140,7 +140,7 @@ This document compares WebWright features against agent-browser and browser-use 
 | Element screenshot | ✅ | ✅ | ❌ |
 | PDF export | ✅ | ✅ | ❌ |
 | Video recording | ✅ | ✅ | ✅ |
-| GIF generation | ❌ | ❌ | ✅ |
+| GIF generation | ✅ | ❌ | ✅ |
 
 ---
 
@@ -148,13 +148,13 @@ This document compares WebWright features against agent-browser and browser-use 
 
 | Feature | WebWright | agent-browser | browser-use |
 |---------|-----------|---------------|-------------|
-| Find by role | ❌ | ✅ | ❌ |
-| Find by text | ❌ | ✅ | ❌ |
-| Find by label | ❌ | ✅ | ❌ |
-| Find by placeholder | ❌ | ✅ | ❌ |
-| Find by alt | ❌ | ✅ | ❌ |
-| Find by title | ❌ | ✅ | ❌ |
-| Find by testid | ❌ | ✅ | ❌ |
+| Find by role | ✅ | ✅ | ❌ |
+| Find by text | ✅ | ✅ | ❌ |
+| Find by label | ✅ | ✅ | ❌ |
+| Find by placeholder | ✅ | ✅ | ❌ |
+| Find by alt | ✅ | ✅ | ❌ |
+| Find by title | ✅ | ✅ | ❌ |
+| Find by testid | ✅ | ✅ | ❌ |
 | Find first/last/nth | ❌ | ✅ | ❌ |
 
 ---
@@ -169,9 +169,9 @@ This document compares WebWright features against agent-browser and browser-use 
 | New tab | ✅ | ✅ | ✅ |
 | Switch tab | ✅ | ✅ | ✅ |
 | Close tab | ✅ | ✅ | ✅ |
-| List tabs | 🔶 | ✅ | ✅ |
-| New window | ❌ | ✅ | ❌ |
-| Bring to front | ❌ | ✅ | ❌ |
+| List tabs | ✅ | ✅ | ✅ |
+| New window | ✅ | ✅ | ❌ |
+| Bring to front | ✅ | ✅ | ❌ |
 
 ---
 
@@ -195,9 +195,9 @@ This document compares WebWright features against agent-browser and browser-use 
 | Get localStorage | ✅ | ✅ | ❌ |
 | Set localStorage | ✅ | ✅ | ❌ |
 | Clear localStorage | ✅ | ✅ | ❌ |
-| Get sessionStorage | ❌ | ✅ | ❌ |
-| Set sessionStorage | ❌ | ✅ | ❌ |
-| Clear sessionStorage | ❌ | ✅ | ❌ |
+| Get sessionStorage | ✅ | ✅ | ❌ |
+| Set sessionStorage | ✅ | ✅ | ❌ |
+| Clear sessionStorage | ✅ | ✅ | ❌ |
 
 ---
 
@@ -210,8 +210,8 @@ This document compares WebWright features against agent-browser and browser-use 
 | Route/intercept | ✅ | ✅ | ❌ |
 | Mock response | ✅ | ✅ | ❌ |
 | Abort request | ✅ | ✅ | ❌ |
-| View requests | ❌ | ✅ | ❌ |
-| HAR recording | ❌ | ✅ | ❌ |
+| View requests | ✅ | ✅ | ❌ |
+| HAR recording | ✅ | ✅ | ❌ |
 | Response body | ❌ | ✅ | ❌ |
 
 ---
@@ -220,13 +220,13 @@ This document compares WebWright features against agent-browser and browser-use 
 
 | Feature | WebWright | agent-browser | browser-use |
 |---------|-----------|---------------|-------------|
-| View console | ❌ | ✅ | ❌ |
-| Clear console | ❌ | ✅ | ❌ |
-| View errors | ❌ | ✅ | ❌ |
-| Trace recording | ❌ | ✅ | ❌ |
-| Highlight element | ❌ | ✅ | ✅ |
-| Pause execution | ❌ | ✅ | ❌ |
-| Debug output | ❌ | ✅ | ✅ |
+| View console | ✅ | ✅ | ❌ |
+| Clear console | ✅ | ✅ | ❌ |
+| View errors | ✅ | ✅ | ❌ |
+| Trace recording | ✅ | ✅ | ❌ |
+| Highlight element | ✅ | ✅ | ✅ |
+| Pause execution | ✅ | ✅ | ❌ |
+| Debug output | ✅ | ✅ | ✅ |
 
 ---
 
@@ -234,8 +234,8 @@ This document compares WebWright features against agent-browser and browser-use 
 
 | Feature | WebWright | agent-browser | browser-use |
 |---------|-----------|---------------|-------------|
-| Save auth state | ❌ | ✅ | ✅ |
-| Load auth state | ❌ | ✅ | ✅ |
+| Save auth state | ✅ | ✅ | ✅ |
+| Load auth state | ✅ | ✅ | ✅ |
 | Session isolation | ✅ | ✅ | ✅ |
 | Named sessions | ✅ | ✅ | ❌ |
 
@@ -248,11 +248,11 @@ This document compares WebWright features against agent-browser and browser-use 
 | Set viewport | ✅ | ✅ | ✅ |
 | Emulate device | ✅ | ✅ | ❌ |
 | Set geolocation | ✅ | ✅ | ❌ |
-| Set timezone | ❌ | ✅ | ❌ |
-| Set locale | ❌ | ✅ | ❌ |
-| Set permissions | ❌ | ✅ | ❌ |
-| Emulate media | ❌ | ✅ | ❌ |
-| Color scheme | ❌ | ✅ | ❌ |
+| Set timezone | ✅ | ✅ | ❌ |
+| Set locale | ✅ | ✅ | ❌ |
+| Set permissions | ✅ | ✅ | ❌ |
+| Emulate media | ✅ | ✅ | ❌ |
+| Color scheme | ✅ | ✅ | ❌ |
 
 ---
 
@@ -273,10 +273,10 @@ This document compares WebWright features against agent-browser and browser-use 
 
 | Feature | WebWright | agent-browser | browser-use |
 |---------|-----------|---------------|-------------|
-| Copy | ❌ | ✅ | ❌ |
-| Paste | ❌ | ✅ | ❌ |
-| Read | ❌ | ✅ | ❌ |
-| Select all | ❌ | ✅ | ❌ |
+| Copy | ✅ | ✅ | ❌ |
+| Paste | ✅ | ✅ | ❌ |
+| Read | ✅ | ✅ | ❌ |
+| Select all | ✅ | ✅ | ❌ |
 
 ---
 

@@ -107,6 +107,8 @@ export interface SnapshotOptions {
   depth?: number;
   /** Include hidden elements */
   includeHidden?: boolean;
+  /** Compact output mode (single line per element) */
+  compact?: boolean;
 }
 
 export interface EnhancedSnapshot {
@@ -297,6 +299,15 @@ function processAriaTree(
     }
     return line;
   });
+
+  // Apply compact mode if requested
+  if (options.compact) {
+    // Compact format: role "name" [ref=e1] - single line, minimal indentation
+    return finalResult
+      .map((line) => line.trim().replace(/^-\s*/, ''))
+      .filter((line) => line.length > 0)
+      .join(' | ');
+  }
 
   return finalResult.length > 0 ? finalResult.join('\n') : '(no interactive elements)';
 }

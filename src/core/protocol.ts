@@ -220,6 +220,7 @@ const snapshotSchema = baseCommandSchema.extend({
   interactive: z.boolean().optional(),
   depth: z.number().positive().optional(),
   includeHidden: z.boolean().optional(),
+  compact: z.boolean().optional(),
 });
 
 const screenshotSchema = baseCommandSchema.extend({
@@ -333,6 +334,134 @@ const waitForLoadStateSchema = baseCommandSchema.extend({
   action: z.literal('waitForLoadState'),
   state: z.enum(['load', 'domcontentloaded', 'networkidle']).optional(),
   timeout: z.number().positive().optional(),
+});
+
+const waitForUrlSchema = baseCommandSchema.extend({
+  action: z.literal('waitForUrl'),
+  url: z.union([z.string(), z.instanceof(RegExp)]),
+  timeout: z.number().positive().optional(),
+});
+
+const waitForTextSchema = baseCommandSchema.extend({
+  action: z.literal('waitForText'),
+  text: z.string(),
+  selector: z.string().optional(),
+  timeout: z.number().positive().optional(),
+});
+
+const waitForFunctionSchema = baseCommandSchema.extend({
+  action: z.literal('waitForFunction'),
+  expression: z.string(),
+  timeout: z.number().positive().optional(),
+  polling: z.union([z.literal('raf'), z.number()]).optional(),
+});
+
+// ============================================================================
+// Debug Commands (Tier 1)
+// ============================================================================
+
+const pauseSchema = baseCommandSchema.extend({
+  action: z.literal('pause'),
+});
+
+const highlightSchema = baseCommandSchema.extend({
+  action: z.literal('highlight'),
+  selector: z.string(),
+});
+
+// ============================================================================
+// Console/Error Commands (Tier 1)
+// ============================================================================
+
+const getConsoleSchema = baseCommandSchema.extend({
+  action: z.literal('getConsole'),
+  clear: z.boolean().optional(),
+  type: z.enum(['log', 'warning', 'error', 'info', 'debug', 'all']).optional().default('all'),
+});
+
+const getErrorsSchema = baseCommandSchema.extend({
+  action: z.literal('getErrors'),
+  clear: z.boolean().optional(),
+});
+
+// ============================================================================
+// State Management Commands (Tier 1)
+// ============================================================================
+
+const saveStateSchema = baseCommandSchema.extend({
+  action: z.literal('saveState'),
+  path: z.string(),
+});
+
+const loadStateSchema = baseCommandSchema.extend({
+  action: z.literal('loadState'),
+  path: z.string(),
+});
+
+// ============================================================================
+// Semantic Locator Commands (Tier 1)
+// ============================================================================
+
+const findByRoleSchema = baseCommandSchema.extend({
+  action: z.literal('findByRole'),
+  role: z.string(),
+  name: z.string().optional(),
+  exact: z.boolean().optional(),
+  includeHidden: z.boolean().optional(),
+});
+
+const findByTextSchema = baseCommandSchema.extend({
+  action: z.literal('findByText'),
+  text: z.string(),
+  exact: z.boolean().optional(),
+});
+
+const findByLabelSchema = baseCommandSchema.extend({
+  action: z.literal('findByLabel'),
+  label: z.string(),
+  exact: z.boolean().optional(),
+});
+
+const findByPlaceholderSchema = baseCommandSchema.extend({
+  action: z.literal('findByPlaceholder'),
+  placeholder: z.string(),
+  exact: z.boolean().optional(),
+});
+
+const findByAltSchema = baseCommandSchema.extend({
+  action: z.literal('findByAlt'),
+  alt: z.string(),
+  exact: z.boolean().optional(),
+});
+
+const findByTitleSchema = baseCommandSchema.extend({
+  action: z.literal('findByTitle'),
+  title: z.string(),
+  exact: z.boolean().optional(),
+});
+
+const findByTestIdSchema = baseCommandSchema.extend({
+  action: z.literal('findByTestId'),
+  testId: z.string(),
+});
+
+// ============================================================================
+// Session Storage Commands (Tier 1)
+// ============================================================================
+
+const getSessionStorageSchema = baseCommandSchema.extend({
+  action: z.literal('getSessionStorage'),
+  key: z.string().optional(),
+});
+
+const setSessionStorageSchema = baseCommandSchema.extend({
+  action: z.literal('setSessionStorage'),
+  key: z.string(),
+  value: z.string(),
+});
+
+const clearSessionStorageSchema = baseCommandSchema.extend({
+  action: z.literal('clearSessionStorage'),
 });
 
 // ============================================================================
@@ -562,6 +691,175 @@ const agentStepSchema = baseCommandSchema.extend({
 });
 
 // ============================================================================
+// Tier 2: HAR/Trace Recording
+// ============================================================================
+
+const startHarSchema = baseCommandSchema.extend({
+  action: z.literal('startHar'),
+  path: z.string(),
+});
+
+const stopHarSchema = baseCommandSchema.extend({
+  action: z.literal('stopHar'),
+});
+
+const startTraceSchema = baseCommandSchema.extend({
+  action: z.literal('startTrace'),
+  path: z.string().optional(),
+  screenshots: z.boolean().optional().default(true),
+  snapshots: z.boolean().optional().default(true),
+  sources: z.boolean().optional().default(false),
+});
+
+const stopTraceSchema = baseCommandSchema.extend({
+  action: z.literal('stopTrace'),
+  path: z.string().optional(),
+});
+
+// ============================================================================
+// Tier 2: Clipboard Operations
+// ============================================================================
+
+const clipboardCopySchema = baseCommandSchema.extend({
+  action: z.literal('clipboardCopy'),
+  selector: z.string().optional(),
+});
+
+const clipboardPasteSchema = baseCommandSchema.extend({
+  action: z.literal('clipboardPaste'),
+  selector: z.string().optional(),
+});
+
+const clipboardReadSchema = baseCommandSchema.extend({
+  action: z.literal('clipboardRead'),
+});
+
+const selectAllSchema = baseCommandSchema.extend({
+  action: z.literal('selectAll'),
+  selector: z.string().optional(),
+});
+
+// ============================================================================
+// Tier 2: Emulation Options
+// ============================================================================
+
+const setTimezoneSchema = baseCommandSchema.extend({
+  action: z.literal('setTimezone'),
+  timezoneId: z.string(),
+});
+
+const setLocaleSchema = baseCommandSchema.extend({
+  action: z.literal('setLocale'),
+  locale: z.string(),
+});
+
+const setPermissionsSchema = baseCommandSchema.extend({
+  action: z.literal('setPermissions'),
+  origin: z.string(),
+  permissions: z.array(z.string()),
+});
+
+const emulateMediaSchema = baseCommandSchema.extend({
+  action: z.literal('emulateMedia'),
+  media: z.enum(['screen', 'print', 'null']).optional(),
+  colorScheme: z.enum(['light', 'dark', 'no-preference', 'null']).optional(),
+  reducedMotion: z.enum(['reduce', 'no-preference', 'null']).optional(),
+  forcedColors: z.enum(['active', 'none', 'null']).optional(),
+});
+
+// ============================================================================
+// Tier 2: Vision/Screenshot Analysis
+// ============================================================================
+
+const analyzeScreenshotSchema = baseCommandSchema.extend({
+  action: z.literal('analyzeScreenshot'),
+  prompt: z.string().optional(),
+  selector: z.string().optional(),
+  fullPage: z.boolean().optional(),
+});
+
+// ============================================================================
+// Tier 2: Element Highlighting Demo Mode
+// ============================================================================
+
+const highlightElementsSchema = baseCommandSchema.extend({
+  action: z.literal('highlightElements'),
+  selectors: z.array(z.string()).optional(),
+  interactive: z.boolean().optional().default(true),
+  showLabels: z.boolean().optional().default(true),
+  duration: z.number().optional(),
+});
+
+const clearHighlightsSchema = baseCommandSchema.extend({
+  action: z.literal('clearHighlights'),
+});
+
+// ============================================================================
+// Tier 2: GIF Generation
+// ============================================================================
+
+const startGifRecordingSchema = baseCommandSchema.extend({
+  action: z.literal('startGifRecording'),
+  maxFrames: z.number().optional().default(100),
+  frameDelay: z.number().optional().default(100),
+});
+
+const stopGifRecordingSchema = baseCommandSchema.extend({
+  action: z.literal('stopGifRecording'),
+  path: z.string(),
+  width: z.number().optional(),
+  height: z.number().optional(),
+});
+
+const captureGifFrameSchema = baseCommandSchema.extend({
+  action: z.literal('captureGifFrame'),
+  label: z.string().optional(),
+});
+
+// ============================================================================
+// Tier 2: Sensitive Data Handling
+// ============================================================================
+
+const setSensitiveDataSchema = baseCommandSchema.extend({
+  action: z.literal('setSensitiveData'),
+  data: z.record(z.record(z.string())),
+});
+
+// ============================================================================
+// Tier 3: Scroll Into View
+// ============================================================================
+
+const scrollIntoViewSchema = baseCommandSchema.extend({
+  action: z.literal('scrollIntoView'),
+  selector: z.string(),
+  block: z.enum(['start', 'center', 'end', 'nearest']).optional(),
+  inline: z.enum(['start', 'center', 'end', 'nearest']).optional(),
+});
+
+// ============================================================================
+// Tier 3: Network Request Viewing
+// ============================================================================
+
+const getRequestsSchema = baseCommandSchema.extend({
+  action: z.literal('getRequests'),
+  urlPattern: z.string().optional(),
+  clear: z.boolean().optional(),
+});
+
+// ============================================================================
+// Tier 3: New Window Management
+// ============================================================================
+
+const newWindowSchema = baseCommandSchema.extend({
+  action: z.literal('newWindow'),
+  url: z.string().url().optional(),
+});
+
+const bringToFrontSchema = baseCommandSchema.extend({
+  action: z.literal('bringToFront'),
+});
+
+// ============================================================================
 // Combined Command Schema (Discriminated Union)
 // ============================================================================
 
@@ -611,6 +909,9 @@ export const commandSchema = z.discriminatedUnion('action', [
   waitForSelectorSchema,
   waitForNavigationSchema,
   waitForLoadStateSchema,
+  waitForUrlSchema,
+  waitForTextSchema,
+  waitForFunctionSchema,
   // Frames
   switchToFrameSchema,
   switchToMainFrameSchema,
@@ -628,6 +929,7 @@ export const commandSchema = z.discriminatedUnion('action', [
   setOfflineSchema,
   routeSchema,
   unrouteSchema,
+  getRequestsSchema,
   // Cookies/Storage
   getCookiesSchema,
   setCookiesSchema,
@@ -635,6 +937,9 @@ export const commandSchema = z.discriminatedUnion('action', [
   getLocalStorageSchema,
   setLocalStorageSchema,
   clearLocalStorageSchema,
+  getSessionStorageSchema,
+  setSessionStorageSchema,
+  clearSessionStorageSchema,
   // Dialog
   handleDialogSchema,
   // Viewport
@@ -651,6 +956,54 @@ export const commandSchema = z.discriminatedUnion('action', [
   // Agent
   agentRunSchema,
   agentStepSchema,
+  // Tier 1: Debug Commands
+  pauseSchema,
+  highlightSchema,
+  // Tier 1: Console/Error Commands
+  getConsoleSchema,
+  getErrorsSchema,
+  // Tier 1: State Management
+  saveStateSchema,
+  loadStateSchema,
+  // Tier 1: Semantic Locators
+  findByRoleSchema,
+  findByTextSchema,
+  findByLabelSchema,
+  findByPlaceholderSchema,
+  findByAltSchema,
+  findByTitleSchema,
+  findByTestIdSchema,
+  // Tier 2: HAR/Trace Recording
+  startHarSchema,
+  stopHarSchema,
+  startTraceSchema,
+  stopTraceSchema,
+  // Tier 2: Clipboard Operations
+  clipboardCopySchema,
+  clipboardPasteSchema,
+  clipboardReadSchema,
+  selectAllSchema,
+  // Tier 2: Emulation Options
+  setTimezoneSchema,
+  setLocaleSchema,
+  setPermissionsSchema,
+  emulateMediaSchema,
+  // Tier 2: Vision/Screenshot Analysis
+  analyzeScreenshotSchema,
+  // Tier 2: Element Highlighting Demo Mode
+  highlightElementsSchema,
+  clearHighlightsSchema,
+  // Tier 2: GIF Generation
+  startGifRecordingSchema,
+  stopGifRecordingSchema,
+  captureGifFrameSchema,
+  // Tier 2: Sensitive Data Handling
+  setSensitiveDataSchema,
+  // Tier 3: Scroll Into View
+  scrollIntoViewSchema,
+  // Tier 3: New Window Management
+  newWindowSchema,
+  bringToFrontSchema,
 ]);
 
 export type Command = z.infer<typeof commandSchema>;

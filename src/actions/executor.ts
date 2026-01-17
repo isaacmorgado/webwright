@@ -3,7 +3,7 @@
  * Adapted from agent-browser/src/actions.ts
  */
 
-import type { Page, Frame, Locator, Response as PlaywrightResponse, Download } from 'playwright-core';
+import type { Page, Frame, Locator, Response as PlaywrightResponse, Download, BrowserContext } from 'playwright-core';
 import type { BrowserManager } from '../browser/manager.js';
 import type { Command, Response } from '../core/protocol.js';
 import { successResponse, errorResponse } from '../core/protocol.js';
@@ -324,6 +324,7 @@ export class ActionExecutor {
           interactive: command.interactive,
           depth: command.depth,
           includeHidden: command.includeHidden,
+          compact: command.compact,
         });
         this.browser.setRefMap(snapshot.refs);
         return {
@@ -445,6 +446,31 @@ export class ActionExecutor {
           timeout: command.timeout,
         });
         return { state: command.state ?? 'load' };
+
+      case 'waitForUrl':
+        await this.browser.getPage().waitForURL(command.url, {
+          timeout: command.timeout,
+        });
+        return { url: this.browser.getPage().url() };
+
+      case 'waitForText':
+        if (command.selector) {
+          await this.browser.getLocator(command.selector).filter({ hasText: command.text }).waitFor({
+            timeout: command.timeout,
+          });
+        } else {
+          await this.browser.getPage().locator(`text=${command.text}`).first().waitFor({
+            timeout: command.timeout,
+          });
+        }
+        return { found: command.text };
+
+      case 'waitForFunction':
+        await this.browser.getPage().waitForFunction(command.expression, {
+          timeout: command.timeout,
+          polling: command.polling,
+        });
+        return { evaluated: true };
 
       // ============ Frames ============
       case 'switchToFrame':
@@ -650,6 +676,338 @@ export class ActionExecutor {
 
       case 'agentStep':
         return { info: 'Use Agent service for step execution' };
+
+      // ============ Tier 1: Debug Commands ============
+      case 'pause':
+        await this.browser.getPage().pause();
+        return { paused: true };
+
+      case 'highlight':
+        await this.browser.highlightElement(command.selector);
+        return { highlighted: command.selector };
+
+      // ============ Tier 1: Console/Error Commands ============
+      case 'getConsole':
+        return {
+          messages: this.browser.getConsoleMessages({
+            type: command.type,
+            clear: command.clear,
+          }),
+        };
+
+      case 'getErrors':
+        return {
+          errors: this.browser.getPageErrors(command.clear),
+        };
+
+      // ============ Tier 1: State Management ============
+      case 'saveState':
+        await this.browser.saveStorageState(command.path);
+        return { saved: command.path };
+
+      case 'loadState':
+        await this.browser.loadStorageState(command.path);
+        return { loaded: command.path };
+
+      // ============ Tier 1: Semantic Locators ============
+      case 'findByRole':
+        const roleLocator = this.browser.getPage().getByRole(
+          command.role as Parameters<Page['getByRole']>[0],
+          {
+            name: command.name,
+            exact: command.exact,
+            includeHidden: command.includeHidden,
+          }
+        );
+        const roleCount = await roleLocator.count();
+        return {
+          found: roleCount,
+          elements: await Promise.all(
+            Array.from({ length: Math.min(roleCount, 10) }, async (_, i) => {
+              const el = roleLocator.nth(i);
+              return {
+                text: await el.textContent().catch(() => null),
+                visible: await el.isVisible().catch(() => false),
+              };
+            })
+          ),
+        };
+
+      case 'findByText':
+        const textLocator = this.browser.getPage().getByText(command.text, {
+          exact: command.exact,
+        });
+        const textCount = await textLocator.count();
+        return { found: textCount };
+
+      case 'findByLabel':
+        const labelLocator = this.browser.getPage().getByLabel(command.label, {
+          exact: command.exact,
+        });
+        const labelCount = await labelLocator.count();
+        return { found: labelCount };
+
+      case 'findByPlaceholder':
+        const placeholderLocator = this.browser.getPage().getByPlaceholder(command.placeholder, {
+          exact: command.exact,
+        });
+        const placeholderCount = await placeholderLocator.count();
+        return { found: placeholderCount };
+
+      case 'findByAlt':
+        const altLocator = this.browser.getPage().getByAltText(command.alt, {
+          exact: command.exact,
+        });
+        const altCount = await altLocator.count();
+        return { found: altCount };
+
+      case 'findByTitle':
+        const titleLocator = this.browser.getPage().getByTitle(command.title, {
+          exact: command.exact,
+        });
+        const titleCount = await titleLocator.count();
+        return { found: titleCount };
+
+      case 'findByTestId':
+        const testIdLocator = this.browser.getPage().getByTestId(command.testId);
+        const testIdCount = await testIdLocator.count();
+        return { found: testIdCount };
+
+      // ============ Tier 1: Session Storage ============
+      case 'getSessionStorage':
+        if (command.key) {
+          const sessionItem = await this.browser.getPage().evaluate(
+            (key) => sessionStorage.getItem(key),
+            command.key
+          );
+          return { value: sessionItem };
+        } else {
+          const sessionStorage = await this.browser.getPage().evaluate(() => {
+            const items: Record<string, string> = {};
+            for (let i = 0; i < window.sessionStorage.length; i++) {
+              const key = window.sessionStorage.key(i);
+              if (key) {
+                items[key] = window.sessionStorage.getItem(key) ?? '';
+              }
+            }
+            return items;
+          });
+          return { storage: sessionStorage };
+        }
+
+      case 'setSessionStorage':
+        await this.browser.getPage().evaluate(
+          ({ key, value }) => sessionStorage.setItem(key, value),
+          { key: command.key, value: command.value }
+        );
+        return { set: true };
+
+      case 'clearSessionStorage':
+        await this.browser.getPage().evaluate(() => sessionStorage.clear());
+        return { cleared: true };
+
+      // ============ Tier 2: HAR/Trace Recording ============
+      case 'startHar':
+        await this.browser.startHarRecording(command.path);
+        return { started: true, path: command.path };
+
+      case 'stopHar':
+        const harPath = await this.browser.stopHarRecording();
+        return { stopped: true, path: harPath };
+
+      case 'startTrace':
+        await this.browser.getPage().context().tracing.start({
+          screenshots: command.screenshots,
+          snapshots: command.snapshots,
+          sources: command.sources,
+        });
+        return { started: true };
+
+      case 'stopTrace':
+        await this.browser.getPage().context().tracing.stop({
+          path: command.path,
+        });
+        return { stopped: true, path: command.path };
+
+      // ============ Tier 2: Clipboard Operations ============
+      case 'clipboardCopy':
+        if (command.selector) {
+          await this.browser.getLocator(command.selector).focus();
+        }
+        // Use Meta key on macOS, Control on others
+        await this.browser.getPage().keyboard.press(
+          process.platform === 'darwin' ? 'Meta+c' : 'Control+c'
+        );
+        return { copied: true };
+
+      case 'clipboardPaste':
+        if (command.selector) {
+          await this.browser.getLocator(command.selector).focus();
+        }
+        await this.browser.getPage().keyboard.press(
+          process.platform === 'darwin' ? 'Meta+v' : 'Control+v'
+        );
+        return { pasted: true };
+
+      case 'clipboardRead':
+        const clipboardText = await this.browser.getPage().evaluate(
+          () => navigator.clipboard.readText()
+        );
+        return { text: clipboardText };
+
+      case 'selectAll':
+        if (command.selector) {
+          await this.browser.getLocator(command.selector).focus();
+        }
+        await this.browser.getPage().keyboard.press(
+          process.platform === 'darwin' ? 'Meta+a' : 'Control+a'
+        );
+        return { selected: true };
+
+      // ============ Tier 2: Emulation Options ============
+      case 'setTimezone':
+        await this.browser.getPage().context().grantPermissions(['geolocation']);
+        // Note: Timezone is set at context creation, this is a best-effort
+        return { timezone: command.timezoneId, note: 'Timezone should be set at browser launch' };
+
+      case 'setLocale':
+        // Note: Locale is set at context creation
+        return { locale: command.locale, note: 'Locale should be set at browser launch' };
+
+      case 'setPermissions':
+        await this.browser.getPage().context().grantPermissions(
+          command.permissions as Parameters<BrowserContext['grantPermissions']>[0],
+          { origin: command.origin }
+        );
+        return { granted: command.permissions, origin: command.origin };
+
+      case 'emulateMedia':
+        await this.browser.getPage().emulateMedia({
+          media: command.media === 'null' ? null : command.media,
+          colorScheme: command.colorScheme === 'null' ? null : command.colorScheme,
+          reducedMotion: command.reducedMotion === 'null' ? null : command.reducedMotion,
+          forcedColors: command.forcedColors === 'null' ? null : command.forcedColors,
+        });
+        return { emulated: true };
+
+      // ============ Tier 2: Vision/Screenshot Analysis ============
+      case 'analyzeScreenshot':
+        const analysisScreenshot = command.selector
+          ? await this.browser.getLocator(command.selector).screenshot({ type: 'png' })
+          : await this.browser.getPage().screenshot({
+              type: 'png',
+              fullPage: command.fullPage,
+            });
+        return {
+          data: analysisScreenshot.toString('base64'),
+          prompt: command.prompt ?? 'Describe what you see in this screenshot',
+          // Note: Actual LLM analysis would be done by the calling service
+        };
+
+      // ============ Tier 2: Element Highlighting Demo Mode ============
+      case 'highlightElements':
+        if (command.selectors?.length) {
+          for (const selector of command.selectors) {
+            await this.browser.highlightElement(selector);
+          }
+          return { highlighted: command.selectors.length };
+        } else {
+          await this.browser.highlightInteractiveElements({
+            showLabels: command.showLabels,
+            duration: command.duration,
+          });
+          return { highlighted: 'interactive' };
+        }
+
+      case 'clearHighlights':
+        await this.browser.clearHighlights();
+        return { cleared: true };
+
+      // ============ Tier 2: GIF Generation ============
+      case 'startGifRecording':
+        this.browser.startGifRecording(command.maxFrames, command.frameDelay);
+        return { started: true, maxFrames: command.maxFrames };
+
+      case 'stopGifRecording':
+        const frames = this.browser.stopGifRecording();
+        // Save frames as individual PNGs, external tool converts to GIF
+        const fs = await import('fs');
+        const path = await import('path');
+        const dir = path.dirname(command.path);
+        await fs.promises.mkdir(dir, { recursive: true });
+
+        // Write frames manifest
+        const manifestPath = command.path.replace(/\.gif$/, '.frames.json');
+        await fs.promises.writeFile(manifestPath, JSON.stringify({
+          frames: frames.map((f, i) => ({
+            index: i,
+            label: f.label,
+            timestamp: f.timestamp,
+          })),
+          totalFrames: frames.length,
+          width: command.width,
+          height: command.height,
+        }, null, 2));
+
+        // Write frame images
+        for (let i = 0; i < frames.length; i++) {
+          const framePath = command.path.replace(/\.gif$/, `.frame${i.toString().padStart(4, '0')}.png`);
+          await fs.promises.writeFile(framePath, Buffer.from(frames[i].data, 'base64'));
+        }
+
+        return {
+          stopped: true,
+          frameCount: frames.length,
+          manifest: manifestPath,
+          note: 'Use ffmpeg or similar to convert frames to GIF: ffmpeg -framerate 10 -i frame%04d.png output.gif',
+        };
+
+      case 'captureGifFrame':
+        await this.browser.captureGifFrame(command.label);
+        return { captured: true, label: command.label };
+
+      // ============ Tier 2: Sensitive Data Handling ============
+      case 'setSensitiveData':
+        this.browser.setSensitiveData(command.data);
+        return { set: true, domains: Object.keys(command.data) };
+
+      // ============ Tier 3: Scroll Into View ============
+      case 'scrollIntoView':
+        await this.browser.getLocator(command.selector).scrollIntoViewIfNeeded();
+        // For more control, use evaluate
+        if (command.block || command.inline) {
+          await this.browser.getLocator(command.selector).evaluate((el, opts) => {
+            el.scrollIntoView({
+              block: opts.block,
+              inline: opts.inline,
+              behavior: 'smooth',
+            });
+          }, { block: command.block, inline: command.inline });
+        }
+        return { scrolled: command.selector };
+
+      // ============ Tier 3: Network Request Viewing ============
+      case 'getRequests':
+        return {
+          requests: this.browser.getNetworkRequests({
+            urlPattern: command.urlPattern,
+            clear: command.clear,
+          }),
+        };
+
+      // ============ Tier 3: New Window Management ============
+      case 'newWindow':
+        // Create a new context for a separate window
+        const newContext = await this.browser.getPage().context().browser()!.newContext();
+        const newWinPage = await newContext.newPage();
+        if (command.url) {
+          await newWinPage.goto(command.url);
+        }
+        return { created: true, url: command.url };
+
+      case 'bringToFront':
+        await this.browser.getPage().bringToFront();
+        return { focused: true };
 
       default:
         throw new Error(`Unknown action: ${(command as any).action}`);

@@ -4,6 +4,7 @@
  */
 
 import { z } from 'zod';
+import type { Page } from 'playwright-core';
 import { BrowserManager } from '../browser/manager.js';
 import { ActionExecutor } from '../actions/executor.js';
 import { getEnhancedSnapshot } from '../dom/snapshot.js';
@@ -75,6 +76,7 @@ const snapshotTool: MCPTool = {
       .describe('Only include interactive elements'),
     selector: z.string().optional().describe('Scope to a specific element'),
     depth: z.number().optional().describe('Maximum tree depth'),
+    compact: z.boolean().optional().describe('Compact single-line output format'),
   }),
 };
 
@@ -226,32 +228,306 @@ const agentStepTool: MCPTool = {
 };
 
 // ============================================================================
+// Tier 1: Debug Tools
+// ============================================================================
+
+const pauseTool: MCPTool = {
+  name: 'browser_pause',
+  description: 'Pause execution for debugging (opens Playwright Inspector)',
+  inputSchema: z.object({}),
+};
+
+const highlightTool: MCPTool = {
+  name: 'browser_highlight',
+  description: 'Highlight an element on the page for visual debugging',
+  inputSchema: z.object({
+    target: z.string().describe('Element ref or selector to highlight'),
+  }),
+};
+
+// ============================================================================
+// Tier 1: Console/Error Tools
+// ============================================================================
+
+const consoleTool: MCPTool = {
+  name: 'browser_console',
+  description: 'Get console messages from the page',
+  inputSchema: z.object({
+    type: z.enum(['log', 'warning', 'error', 'info', 'debug', 'all']).optional()
+      .describe('Filter by message type'),
+    clear: z.boolean().optional().describe('Clear messages after reading'),
+  }),
+};
+
+const errorsTool: MCPTool = {
+  name: 'browser_errors',
+  description: 'Get page errors (uncaught exceptions)',
+  inputSchema: z.object({
+    clear: z.boolean().optional().describe('Clear errors after reading'),
+  }),
+};
+
+// ============================================================================
+// Tier 1: State Management Tools
+// ============================================================================
+
+const saveStateTool: MCPTool = {
+  name: 'browser_save_state',
+  description: 'Save authentication/session state to a file for later use',
+  inputSchema: z.object({
+    path: z.string().describe('Path to save the state file'),
+  }),
+};
+
+const loadStateTool: MCPTool = {
+  name: 'browser_load_state',
+  description: 'Load authentication/session state from a file',
+  inputSchema: z.object({
+    path: z.string().describe('Path to the state file'),
+  }),
+};
+
+// ============================================================================
+// Tier 1: Semantic Locator Tools
+// ============================================================================
+
+const findByRoleTool: MCPTool = {
+  name: 'browser_find_by_role',
+  description: 'Find elements by ARIA role',
+  inputSchema: z.object({
+    role: z.string().describe('ARIA role (button, link, textbox, etc.)'),
+    name: z.string().optional().describe('Accessible name'),
+    exact: z.boolean().optional().describe('Exact name match'),
+  }),
+};
+
+const findByTextTool: MCPTool = {
+  name: 'browser_find_by_text',
+  description: 'Find elements by text content',
+  inputSchema: z.object({
+    text: z.string().describe('Text to find'),
+    exact: z.boolean().optional().describe('Exact text match'),
+  }),
+};
+
+const findByLabelTool: MCPTool = {
+  name: 'browser_find_by_label',
+  description: 'Find form elements by their label',
+  inputSchema: z.object({
+    label: z.string().describe('Label text'),
+    exact: z.boolean().optional().describe('Exact label match'),
+  }),
+};
+
+// ============================================================================
+// Tier 1: Session Storage Tools
+// ============================================================================
+
+const sessionStorageTool: MCPTool = {
+  name: 'browser_session_storage',
+  description: 'Get or set sessionStorage values',
+  inputSchema: z.object({
+    action: z.enum(['get', 'set', 'clear']).describe('Action to perform'),
+    key: z.string().optional().describe('Storage key'),
+    value: z.string().optional().describe('Value to set'),
+  }),
+};
+
+// ============================================================================
+// Tier 2: Element Highlighting Demo Mode
+// ============================================================================
+
+const highlightElementsTool: MCPTool = {
+  name: 'browser_highlight_elements',
+  description: 'Highlight all interactive elements with colored overlays (demo mode)',
+  inputSchema: z.object({
+    showLabels: z.boolean().optional().default(true)
+      .describe('Show element labels'),
+    duration: z.number().optional().describe('Duration in ms before highlights fade'),
+  }),
+};
+
+// ============================================================================
+// Tier 2: GIF Recording Tools
+// ============================================================================
+
+const startGifTool: MCPTool = {
+  name: 'browser_start_gif',
+  description: 'Start recording frames for GIF generation',
+  inputSchema: z.object({
+    maxFrames: z.number().optional().default(100).describe('Max frames to capture'),
+  }),
+};
+
+const captureFrameTool: MCPTool = {
+  name: 'browser_capture_frame',
+  description: 'Capture a frame for the GIF (call after each action)',
+  inputSchema: z.object({
+    label: z.string().optional().describe('Label for this frame'),
+  }),
+};
+
+const stopGifTool: MCPTool = {
+  name: 'browser_stop_gif',
+  description: 'Stop GIF recording and save frames',
+  inputSchema: z.object({
+    path: z.string().describe('Output path for the GIF'),
+  }),
+};
+
+// ============================================================================
+// Tier 2: Trace/HAR Recording Tools
+// ============================================================================
+
+const startTraceTool: MCPTool = {
+  name: 'browser_start_trace',
+  description: 'Start recording a trace for debugging',
+  inputSchema: z.object({
+    screenshots: z.boolean().optional().default(true).describe('Include screenshots'),
+    snapshots: z.boolean().optional().default(true).describe('Include DOM snapshots'),
+  }),
+};
+
+const stopTraceTool: MCPTool = {
+  name: 'browser_stop_trace',
+  description: 'Stop trace recording and save to file',
+  inputSchema: z.object({
+    path: z.string().describe('Output path for the trace'),
+  }),
+};
+
+// ============================================================================
+// Tier 2: Network Request Viewing
+// ============================================================================
+
+const getRequestsTool: MCPTool = {
+  name: 'browser_get_requests',
+  description: 'Get recorded network requests',
+  inputSchema: z.object({
+    urlPattern: z.string().optional().describe('Filter by URL pattern (regex)'),
+    clear: z.boolean().optional().describe('Clear requests after reading'),
+  }),
+};
+
+// ============================================================================
+// Tier 2: Emulation Tools
+// ============================================================================
+
+const emulateMediaTool: MCPTool = {
+  name: 'browser_emulate_media',
+  description: 'Emulate media features (color scheme, reduced motion, etc.)',
+  inputSchema: z.object({
+    colorScheme: z.enum(['light', 'dark', 'no-preference']).optional()
+      .describe('Preferred color scheme'),
+    reducedMotion: z.enum(['reduce', 'no-preference']).optional()
+      .describe('Reduced motion preference'),
+  }),
+};
+
+// ============================================================================
+// Tier 3: Clipboard Tools
+// ============================================================================
+
+const clipboardTool: MCPTool = {
+  name: 'browser_clipboard',
+  description: 'Clipboard operations (copy, paste, read)',
+  inputSchema: z.object({
+    action: z.enum(['copy', 'paste', 'read', 'selectAll']).describe('Clipboard action'),
+    target: z.string().optional().describe('Element to focus first'),
+  }),
+};
+
+// ============================================================================
+// Tier 2: Sensitive Data Handling
+// ============================================================================
+
+const setSensitiveDataTool: MCPTool = {
+  name: 'browser_set_sensitive_data',
+  description: 'Set sensitive data for placeholder replacement (passwords, API keys). Use <secret>key</secret> placeholders in fill commands.',
+  inputSchema: z.object({
+    data: z.record(z.record(z.string()))
+      .describe('Domain-keyed secrets: { "example.com": { "password": "xxx", "apiKey": "yyy" } }'),
+  }),
+};
+
+// ============================================================================
+// Tier 2: Vision/Screenshot Analysis
+// ============================================================================
+
+const analyzeScreenshotTool: MCPTool = {
+  name: 'browser_analyze_screenshot',
+  description: 'Take a screenshot and return base64 data for vision/LLM analysis',
+  inputSchema: z.object({
+    selector: z.string().optional().describe('Element to screenshot (omit for full page)'),
+    fullPage: z.boolean().optional().describe('Capture full scrollable page'),
+    prompt: z.string().optional().describe('Analysis prompt to include with the screenshot'),
+  }),
+};
+
+// ============================================================================
 // All Tools
 // ============================================================================
 
 export const mcpTools: MCPTool[] = [
+  // Core navigation
   navigateTool,
+  backTool,
+  forwardTool,
+  reloadTool,
+  // Interaction
   clickTool,
   typeTool,
   fillTool,
   scrollTool,
-  snapshotTool,
-  screenshotTool,
-  stateTool,
-  backTool,
-  forwardTool,
-  reloadTool,
-  waitTool,
-  executeTool,
   selectTool,
   checkTool,
   uncheckTool,
   hoverTool,
   pressTool,
+  // Information
+  snapshotTool,
+  screenshotTool,
+  stateTool,
+  waitTool,
+  executeTool,
+  // Storage
   cookiesTool,
+  sessionStorageTool,
+  // Network
   networkTool,
+  getRequestsTool,
+  // Agent
   agentRunTool,
   agentStepTool,
+  // Tier 1: Debug
+  pauseTool,
+  highlightTool,
+  // Tier 1: Console/Errors
+  consoleTool,
+  errorsTool,
+  // Tier 1: State Management
+  saveStateTool,
+  loadStateTool,
+  // Tier 1: Semantic Locators
+  findByRoleTool,
+  findByTextTool,
+  findByLabelTool,
+  // Tier 2: Element Highlighting
+  highlightElementsTool,
+  // Tier 2: GIF Recording
+  startGifTool,
+  captureFrameTool,
+  stopGifTool,
+  // Tier 2: Trace Recording
+  startTraceTool,
+  stopTraceTool,
+  // Tier 2: Emulation
+  emulateMediaTool,
+  // Tier 3: Clipboard
+  clipboardTool,
+  // Tier 2: Additional
+  setSensitiveDataTool,
+  analyzeScreenshotTool,
 ];
 
 // ============================================================================
@@ -583,6 +859,188 @@ export class MCPServer {
             return { done: true, thought: args.thought };
         }
         return { executed: action.type, thought: args.thought };
+
+      // ============ Tier 1: Debug ============
+      case 'browser_pause':
+        await this.browser.getPage().pause();
+        return { paused: true };
+
+      case 'browser_highlight':
+        await this.browser.highlightElement(args.target as string);
+        return { highlighted: args.target };
+
+      // ============ Tier 1: Console/Errors ============
+      case 'browser_console':
+        return {
+          messages: this.browser.getConsoleMessages({
+            type: args.type as string,
+            clear: args.clear as boolean,
+          }),
+        };
+
+      case 'browser_errors':
+        return {
+          errors: this.browser.getPageErrors(args.clear as boolean),
+        };
+
+      // ============ Tier 1: State Management ============
+      case 'browser_save_state':
+        await this.browser.saveStorageState(args.path as string);
+        return { saved: args.path };
+
+      case 'browser_load_state':
+        await this.browser.loadStorageState(args.path as string);
+        return { loaded: args.path };
+
+      // ============ Tier 1: Semantic Locators ============
+      case 'browser_find_by_role':
+        const roleLocator = this.browser.getPage().getByRole(
+          args.role as Parameters<Page['getByRole']>[0],
+          { name: args.name as string, exact: args.exact as boolean }
+        );
+        return { found: await roleLocator.count() };
+
+      case 'browser_find_by_text':
+        const textLocator = this.browser.getPage().getByText(
+          args.text as string,
+          { exact: args.exact as boolean }
+        );
+        return { found: await textLocator.count() };
+
+      case 'browser_find_by_label':
+        const labelLocator = this.browser.getPage().getByLabel(
+          args.label as string,
+          { exact: args.exact as boolean }
+        );
+        return { found: await labelLocator.count() };
+
+      // ============ Tier 1: Session Storage ============
+      case 'browser_session_storage':
+        switch (args.action) {
+          case 'get':
+            if (args.key) {
+              const value = await this.browser.getPage().evaluate(
+                (key) => sessionStorage.getItem(key),
+                args.key as string
+              );
+              return { value };
+            } else {
+              const storage = await this.browser.getPage().evaluate(() => {
+                const items: Record<string, string> = {};
+                for (let i = 0; i < sessionStorage.length; i++) {
+                  const key = sessionStorage.key(i);
+                  if (key) items[key] = sessionStorage.getItem(key) ?? '';
+                }
+                return items;
+              });
+              return { storage };
+            }
+          case 'set':
+            await this.browser.getPage().evaluate(
+              ({ key, value }) => sessionStorage.setItem(key, value),
+              { key: args.key as string, value: args.value as string }
+            );
+            return { set: true };
+          case 'clear':
+            await this.browser.getPage().evaluate(() => sessionStorage.clear());
+            return { cleared: true };
+        }
+        break;
+
+      // ============ Tier 2: Element Highlighting ============
+      case 'browser_highlight_elements':
+        await this.browser.highlightInteractiveElements({
+          showLabels: args.showLabels as boolean,
+          duration: args.duration as number,
+        });
+        return { highlighted: true };
+
+      // ============ Tier 2: GIF Recording ============
+      case 'browser_start_gif':
+        this.browser.startGifRecording(args.maxFrames as number);
+        return { started: true };
+
+      case 'browser_capture_frame':
+        await this.browser.captureGifFrame(args.label as string);
+        return { captured: true };
+
+      case 'browser_stop_gif':
+        const frames = this.browser.stopGifRecording();
+        return { stopped: true, frameCount: frames.length };
+
+      // ============ Tier 2: Trace Recording ============
+      case 'browser_start_trace':
+        await this.browser.getPage().context().tracing.start({
+          screenshots: args.screenshots as boolean ?? true,
+          snapshots: args.snapshots as boolean ?? true,
+        });
+        return { started: true };
+
+      case 'browser_stop_trace':
+        await this.browser.getPage().context().tracing.stop({
+          path: args.path as string,
+        });
+        return { stopped: true, path: args.path };
+
+      // ============ Tier 2: Network Requests ============
+      case 'browser_get_requests':
+        return {
+          requests: this.browser.getNetworkRequests({
+            urlPattern: args.urlPattern as string,
+            clear: args.clear as boolean,
+          }),
+        };
+
+      // ============ Tier 2: Emulation ============
+      case 'browser_emulate_media':
+        await this.browser.getPage().emulateMedia({
+          colorScheme: args.colorScheme as 'light' | 'dark' | 'no-preference',
+          reducedMotion: args.reducedMotion as 'reduce' | 'no-preference',
+        });
+        return { emulated: true };
+
+      // ============ Tier 3: Clipboard ============
+      case 'browser_clipboard':
+        if (args.target) {
+          await this.browser.getLocator(args.target as string).focus();
+        }
+        // Use Meta key on macOS, Control on others
+        const modifier = process.platform === 'darwin' ? 'Meta' : 'Control';
+        switch (args.action) {
+          case 'copy':
+            await this.browser.getPage().keyboard.press(`${modifier}+c`);
+            return { copied: true };
+          case 'paste':
+            await this.browser.getPage().keyboard.press(`${modifier}+v`);
+            return { pasted: true };
+          case 'read':
+            const text = await this.browser.getPage().evaluate(
+              () => navigator.clipboard.readText()
+            );
+            return { text };
+          case 'selectAll':
+            await this.browser.getPage().keyboard.press(`${modifier}+a`);
+            return { selected: true };
+        }
+        break;
+
+      // ============ Tier 2: Sensitive Data ============
+      case 'browser_set_sensitive_data':
+        this.browser.setSensitiveData(args.data as Record<string, Record<string, string>>);
+        return { set: true, domains: Object.keys(args.data as Record<string, unknown>) };
+
+      // ============ Tier 2: Vision/Screenshot Analysis ============
+      case 'browser_analyze_screenshot':
+        const analysisScreenshot = args.selector
+          ? await this.browser.getLocator(args.selector as string).screenshot({ type: 'png' })
+          : await this.browser.getPage().screenshot({
+              type: 'png',
+              fullPage: args.fullPage as boolean,
+            });
+        return {
+          data: analysisScreenshot.toString('base64'),
+          prompt: args.prompt as string ?? 'Describe what you see in this screenshot',
+        };
 
       default:
         throw new Error(`Unknown tool: ${name}`);

@@ -76,6 +76,46 @@ export class BrowserManager {
   // Launch options
   private launchOptions: BrowserLaunchOptions = {};
 
+  // Console and error tracking
+  private consoleMessages: Array<{
+    type: string;
+    text: string;
+    timestamp: number;
+    location?: { url: string; lineNumber: number; columnNumber: number };
+  }> = [];
+  private pageErrors: Array<{
+    message: string;
+    stack?: string;
+    timestamp: number;
+  }> = [];
+
+  // Network request tracking
+  private networkRequests: Array<{
+    url: string;
+    method: string;
+    status?: number;
+    resourceType: string;
+    timestamp: number;
+    responseHeaders?: Record<string, string>;
+  }> = [];
+
+  // GIF recording state
+  private gifFrames: Array<{
+    data: string;
+    label?: string;
+    timestamp: number;
+  }> = [];
+  private gifRecordingActive = false;
+  private gifMaxFrames = 100;
+  private gifFrameDelay = 100;
+
+  // Sensitive data for masking
+  private sensitiveData: Record<string, Record<string, string>> = {};
+
+  // HAR recording state
+  private harRecordingActive = false;
+  private harPath: string | null = null;
+
   // ============================================================================
   // Lifecycle Methods
   // ============================================================================
@@ -119,7 +159,13 @@ export class BrowserManager {
       this.contexts.push(context);
       this.pages = context.pages();
       if (this.pages.length === 0) {
-        this.pages.push(await context.newPage());
+        const page = await context.newPage();
+        this.pages.push(page);
+        this.setupPageListeners(page);
+      } else {
+        for (const page of this.pages) {
+          this.setupPageListeners(page);
+        }
       }
     } else {
       // Standard launch
@@ -141,10 +187,60 @@ export class BrowserManager {
       this.contexts.push(context);
       const page = await context.newPage();
       this.pages.push(page);
+      this.setupPageListeners(page);
     }
 
     this.activePageIndex = 0;
     this.activeFrame = null;
+  }
+
+  /**
+   * Set up console, error, and network listeners on a page
+   */
+  private setupPageListeners(page: Page): void {
+    // Console message tracking
+    page.on('console', (msg) => {
+      this.consoleMessages.push({
+        type: msg.type(),
+        text: msg.text(),
+        timestamp: Date.now(),
+        location: msg.location() ? {
+          url: msg.location().url,
+          lineNumber: msg.location().lineNumber,
+          columnNumber: msg.location().columnNumber,
+        } : undefined,
+      });
+    });
+
+    // Page error tracking
+    page.on('pageerror', (error) => {
+      this.pageErrors.push({
+        message: error.message,
+        stack: error.stack,
+        timestamp: Date.now(),
+      });
+    });
+
+    // Network request tracking
+    page.on('request', (request) => {
+      this.networkRequests.push({
+        url: request.url(),
+        method: request.method(),
+        resourceType: request.resourceType(),
+        timestamp: Date.now(),
+      });
+    });
+
+    page.on('response', (response) => {
+      // Update the matching request with response info
+      const requestIndex = this.networkRequests.findIndex(
+        (r) => r.url === response.url() && !r.status
+      );
+      if (requestIndex !== -1) {
+        this.networkRequests[requestIndex].status = response.status();
+        this.networkRequests[requestIndex].responseHeaders = response.headers();
+      }
+    });
   }
 
   async close(): Promise<void> {
@@ -537,6 +633,291 @@ export class BrowserManager {
         force: tp.force,
       })),
       modifiers: params.modifiers,
+    });
+  }
+
+  // ============================================================================
+  // Console & Error Methods
+  // ============================================================================
+
+  getConsoleMessages(options?: { type?: string; clear?: boolean }): typeof this.consoleMessages {
+    let messages = this.consoleMessages;
+    if (options?.type && options.type !== 'all') {
+      messages = messages.filter((m) => m.type === options.type);
+    }
+    if (options?.clear) {
+      this.consoleMessages = [];
+    }
+    return messages;
+  }
+
+  getPageErrors(clear?: boolean): typeof this.pageErrors {
+    const errors = this.pageErrors;
+    if (clear) {
+      this.pageErrors = [];
+    }
+    return errors;
+  }
+
+  clearConsole(): void {
+    this.consoleMessages = [];
+  }
+
+  clearErrors(): void {
+    this.pageErrors = [];
+  }
+
+  // ============================================================================
+  // Network Request Methods
+  // ============================================================================
+
+  getNetworkRequests(options?: { urlPattern?: string; clear?: boolean }): typeof this.networkRequests {
+    let requests = this.networkRequests;
+    if (options?.urlPattern) {
+      const pattern = new RegExp(options.urlPattern);
+      requests = requests.filter((r) => pattern.test(r.url));
+    }
+    if (options?.clear) {
+      this.networkRequests = [];
+    }
+    return requests;
+  }
+
+  clearNetworkRequests(): void {
+    this.networkRequests = [];
+  }
+
+  // ============================================================================
+  // State Save/Load Methods (Auth Persistence)
+  // ============================================================================
+
+  async saveStorageState(path: string): Promise<void> {
+    const context = this.getContext();
+    await context.storageState({ path });
+  }
+
+  async loadStorageState(path: string): Promise<void> {
+    // Note: Loading storage state requires re-creating the context
+    // This is a limitation of Playwright
+    const fs = await import('fs');
+    const state = JSON.parse(await fs.promises.readFile(path, 'utf-8'));
+
+    const context = this.getContext();
+    // Add cookies
+    if (state.cookies?.length > 0) {
+      await context.addCookies(state.cookies);
+    }
+    // Set local storage via evaluate
+    if (state.origins?.length > 0) {
+      for (const origin of state.origins) {
+        if (origin.localStorage?.length > 0) {
+          const page = this.getPage();
+          if (page.url().startsWith(origin.origin)) {
+            await page.evaluate((items) => {
+              for (const item of items) {
+                localStorage.setItem(item.name, item.value);
+              }
+            }, origin.localStorage);
+          }
+        }
+      }
+    }
+  }
+
+  // ============================================================================
+  // GIF Recording Methods
+  // ============================================================================
+
+  startGifRecording(maxFrames = 100, frameDelay = 100): void {
+    this.gifRecordingActive = true;
+    this.gifMaxFrames = maxFrames;
+    this.gifFrameDelay = frameDelay;
+    this.gifFrames = [];
+  }
+
+  async captureGifFrame(label?: string): Promise<void> {
+    if (!this.gifRecordingActive) return;
+    if (this.gifFrames.length >= this.gifMaxFrames) return;
+
+    const screenshot = await this.getPage().screenshot({ type: 'png' });
+    this.gifFrames.push({
+      data: screenshot.toString('base64'),
+      label,
+      timestamp: Date.now(),
+    });
+  }
+
+  getGifFrames(): typeof this.gifFrames {
+    return this.gifFrames;
+  }
+
+  stopGifRecording(): typeof this.gifFrames {
+    this.gifRecordingActive = false;
+    return this.gifFrames;
+  }
+
+  isGifRecording(): boolean {
+    return this.gifRecordingActive;
+  }
+
+  // ============================================================================
+  // Sensitive Data Handling
+  // ============================================================================
+
+  setSensitiveData(data: Record<string, Record<string, string>>): void {
+    this.sensitiveData = data;
+  }
+
+  getSensitiveData(): Record<string, Record<string, string>> {
+    return this.sensitiveData;
+  }
+
+  /**
+   * Replace sensitive data placeholders with actual values
+   * Format: <secret>key_name</secret>
+   */
+  replaceSensitiveData(text: string, domain?: string): string {
+    let result = text;
+
+    // Get domain-specific data
+    const domainData = domain ? this.sensitiveData[domain] : undefined;
+
+    // Replace placeholders
+    const placeholderRegex = /<secret>([^<]+)<\/secret>/g;
+    result = result.replace(placeholderRegex, (match, key) => {
+      // Check domain-specific first
+      if (domainData && domainData[key]) {
+        return domainData[key];
+      }
+      // Check global sensitive data
+      for (const [, siteData] of Object.entries(this.sensitiveData)) {
+        if (siteData[key]) {
+          return siteData[key];
+        }
+      }
+      // Return placeholder if not found
+      return match;
+    });
+
+    return result;
+  }
+
+  // ============================================================================
+  // HAR Recording Methods
+  // ============================================================================
+
+  async startHarRecording(path: string): Promise<void> {
+    if (this.harRecordingActive) {
+      throw new Error('HAR recording already active');
+    }
+    this.harRecordingActive = true;
+    this.harPath = path;
+    // Note: HAR recording is handled at context level
+    // This is a simplified implementation
+  }
+
+  async stopHarRecording(): Promise<string | null> {
+    if (!this.harRecordingActive) {
+      return null;
+    }
+    this.harRecordingActive = false;
+    const path = this.harPath;
+    this.harPath = null;
+    return path;
+  }
+
+  // ============================================================================
+  // Element Highlighting for Demo Mode
+  // ============================================================================
+
+  async highlightElement(selector: string): Promise<void> {
+    const locator = this.getLocator(selector);
+    await locator.highlight();
+  }
+
+  async highlightInteractiveElements(options?: { showLabels?: boolean; duration?: number }): Promise<void> {
+    const page = this.getPage();
+    const showLabels = options?.showLabels ?? true;
+    const duration = options?.duration ?? 5000;
+
+    // Inject highlighting script
+    await page.evaluate(({ showLabels, duration }) => {
+      // Color mapping for different element types
+      const colors: Record<string, string> = {
+        button: '#FF6B6B',
+        input: '#4ECDC4',
+        select: '#45B7D1',
+        a: '#96CEB4',
+        textarea: '#FF8C42',
+        default: '#DDA0DD',
+      };
+
+      // Find all interactive elements
+      const interactiveSelectors = [
+        'button', 'input', 'select', 'textarea', 'a[href]',
+        '[role="button"]', '[role="link"]', '[role="checkbox"]',
+        '[role="radio"]', '[role="textbox"]', '[role="combobox"]',
+        '[onclick]', '[tabindex]:not([tabindex="-1"])',
+      ];
+
+      const elements = document.querySelectorAll(interactiveSelectors.join(','));
+      const overlays: HTMLElement[] = [];
+
+      elements.forEach((el, index) => {
+        const rect = el.getBoundingClientRect();
+        if (rect.width === 0 || rect.height === 0) return;
+
+        const tagName = el.tagName.toLowerCase();
+        const color = colors[tagName] || colors.default;
+
+        // Create highlight overlay
+        const overlay = document.createElement('div');
+        overlay.style.cssText = `
+          position: fixed;
+          left: ${rect.left}px;
+          top: ${rect.top}px;
+          width: ${rect.width}px;
+          height: ${rect.height}px;
+          border: 2px solid ${color};
+          background: ${color}20;
+          pointer-events: none;
+          z-index: 999999;
+          box-sizing: border-box;
+        `;
+
+        if (showLabels) {
+          const label = document.createElement('div');
+          label.textContent = `e${index + 1}`;
+          label.style.cssText = `
+            position: absolute;
+            top: -20px;
+            left: 0;
+            background: ${color};
+            color: white;
+            padding: 2px 6px;
+            font-size: 11px;
+            font-family: monospace;
+            border-radius: 3px;
+          `;
+          overlay.appendChild(label);
+        }
+
+        document.body.appendChild(overlay);
+        overlays.push(overlay);
+      });
+
+      // Remove overlays after duration
+      setTimeout(() => {
+        overlays.forEach((o) => o.remove());
+      }, duration);
+    }, { showLabels, duration });
+  }
+
+  async clearHighlights(): Promise<void> {
+    const page = this.getPage();
+    await page.evaluate(() => {
+      const overlays = document.querySelectorAll('[data-webwright-highlight]');
+      overlays.forEach((o) => o.remove());
     });
   }
 

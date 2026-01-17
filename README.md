@@ -1,10 +1,10 @@
-# AgentBrowser Pro
+# WebWright
 
-> Next-generation browser automation framework for AI agents - combining the best of agent-browser and browser-use
+> AI-powered browser automation that crafts seamless web interactions
 
-**AgentBrowser Pro** is a unified browser automation system that:
+**WebWright** is a unified browser automation framework that:
 
-1. **Combines the best features** from Vercel's agent-browser and browser-use
+1. **Enables AI-native browser control** with ref-based element targeting
 2. **Integrates natively** with Claude Code (MCP + Skills), VS Code, and Roo Code
 3. **Supports multiple execution modes**: CLI, MCP Server, Node.js Library
 4. **Provides vision + accessibility** dual-mode browser understanding
@@ -14,7 +14,7 @@
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                        AgentBrowser Pro                                      │
+│                              WebWright                                       │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐    │
 │  │  CLI Layer   │  │  MCP Server  │  │  Node.js API │  │ Standalone   │    │
@@ -45,13 +45,13 @@
 ## Installation
 
 ```bash
-npm install -g @anthropic/agentbrowser-pro
+npm install -g webwright
 ```
 
 Or use with npx:
 
 ```bash
-npx @anthropic/agentbrowser-pro navigate https://example.com
+npx webwright navigate https://example.com
 ```
 
 ## Quick Start
@@ -60,25 +60,25 @@ npx @anthropic/agentbrowser-pro navigate https://example.com
 
 ```bash
 # Navigate to a URL
-agentbrowser-pro navigate https://example.com
+webwright navigate https://example.com
 
 # Get accessibility tree with element refs
-agentbrowser-pro snapshot
+webwright snapshot
 
 # Click an element using ref
-agentbrowser-pro click @e1
+webwright click @e1
 
 # Fill a form field
-agentbrowser-pro fill @e2 "hello@example.com"
+webwright fill @e2 "hello@example.com"
 
 # Take a screenshot
-agentbrowser-pro screenshot output.png
+webwright screenshot output.png
 ```
 
 ### Node.js API
 
 ```typescript
-import { BrowserManager, getEnhancedSnapshot } from '@anthropic/agentbrowser-pro';
+import { BrowserManager, getEnhancedSnapshot } from 'webwright';
 
 const browser = new BrowserManager();
 
@@ -110,7 +110,7 @@ await browser.close();
 Add to Claude Code:
 
 ```bash
-claude mcp add --transport stdio agentbrowser-pro -- npx -y @anthropic/agentbrowser-pro mcp
+claude mcp add --transport stdio webwright -- npx -y webwright mcp
 ```
 
 Or configure in `.claude/mcp.json`:
@@ -118,9 +118,9 @@ Or configure in `.claude/mcp.json`:
 ```json
 {
   "mcpServers": {
-    "agentbrowser-pro": {
+    "webwright": {
       "command": "npx",
-      "args": ["-y", "@anthropic/agentbrowser-pro", "mcp"]
+      "args": ["-y", "webwright", "mcp"]
     }
   }
 }
@@ -136,17 +136,12 @@ Use browser_click with target @e1 to click the first element
 
 ## Features
 
-### From agent-browser (Vercel)
-
 - **Fast Rust CLI** - 50x faster startup (~10ms vs ~500ms)
 - **Multi-browser support** - Chromium, Firefox, WebKit via Playwright
 - **100+ actions** - Complete browser control API
 - **Pair browsing** - WebSocket streaming + input injection
 - **Serverless support** - Custom executable path for Lambda
 - **AI-friendly errors** - Actionable error transformation
-
-### From browser-use
-
 - **Vision support** - Screenshot capture + visual analysis
 - **Multi-source DOM** - DOM + Accessibility + Snapshot fusion
 - **Agent loop** - Thinking, evaluation, memory, goals
@@ -216,7 +211,7 @@ closepage          Close current page
 
 ## Selectors
 
-AgentBrowser Pro supports multiple selector formats:
+WebWright supports multiple selector formats:
 
 | Format | Example | Description |
 |--------|---------|-------------|
@@ -240,8 +235,8 @@ AgentBrowser Pro supports multiple selector formats:
 Refs (`e1`, `e2`, etc.) can be used directly in commands:
 
 ```bash
-agentbrowser-pro click @e5
-agentbrowser-pro fill @e3 "user@example.com"
+webwright click @e5
+webwright fill @e3 "user@example.com"
 ```
 
 ## MCP Tools
@@ -285,18 +280,18 @@ agentbrowser-pro fill @e3 "user@example.com"
 ## Environment Variables
 
 ```bash
-AGENT_BROWSER_SESSION         Default session name
-AGENT_BROWSER_HEADED          Run headed (1 = true)
-AGENT_BROWSER_EXECUTABLE_PATH Browser executable path
-AGENT_BROWSER_EXTENSIONS      Comma-separated extension paths
+WEBWRIGHT_SESSION         Default session name
+WEBWRIGHT_HEADED          Run headed (1 = true)
+WEBWRIGHT_EXECUTABLE_PATH Browser executable path
+WEBWRIGHT_EXTENSIONS      Comma-separated extension paths
 ```
 
 ## Development
 
 ```bash
 # Clone repository
-git clone https://github.com/anthropics/agentbrowser-pro
-cd agentbrowser-pro
+git clone https://github.com/isaacmorgado/webwright
+cd webwright
 
 # Install dependencies
 npm install
@@ -326,22 +321,15 @@ npm run dev
 
 ```bash
 # Full snapshot: ~5000 tokens
-agentbrowser-pro snapshot
+webwright snapshot
 
 # Interactive only: ~500 tokens (90% reduction)
-agentbrowser-pro snapshot --interactive
+webwright snapshot --interactive
 
 # Scoped to selector: ~100 tokens (98% reduction)
-agentbrowser-pro snapshot "#main-form"
+webwright snapshot "#main-form"
 ```
 
 ## License
 
 Apache-2.0
-
-## Credits
-
-AgentBrowser Pro combines innovations from:
-
-- **[agent-browser](https://github.com/vercel-labs/agent-browser)** by Vercel Labs
-- **[browser-use](https://github.com/browser-use/browser-use)** by Browser-Use team

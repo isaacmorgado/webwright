@@ -1,12 +1,12 @@
 {
-  "name": "@anthropic/agentbrowser-pro",
+  "name": "webwright",
   "version": "1.0.0",
-  "description": "Next-generation browser automation framework for AI agents - combining the best of agent-browser and browser-use",
+  "description": "AI-powered browser automation that crafts seamless web interactions",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "bin": {
-    "agentbrowser-pro": "./bin/agentbrowser-pro"
+    "webwright": "./bin/agentbrowser-pro"
   },
   "exports": {
     ".": {
@@ -42,7 +42,7 @@
     "claude",
     "web-scraping"
   ],
-  "author": "Anthropic",
+  "author": "Isaac Morgado",
   "license": "Apache-2.0",
   "dependencies": {
     "playwright-core": "^1.52.0",

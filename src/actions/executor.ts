@@ -1366,6 +1366,289 @@ export class ActionExecutor {
         };
       }
 
+      // Human-Like Click (from browser-use element.py patterns)
+      case 'humanClick': {
+        const locator = this.browser.getLocator(command.selector);
+
+        // Get element bounding box
+        const box = await locator.boundingBox();
+        if (!box) {
+          throw new Error(`Element not found or not visible: ${command.selector}`);
+        }
+
+        // Calculate center with random jitter (human-like imprecision)
+        const jitter = command.jitter ?? 3;
+        const randomJitterX = (Math.random() - 0.5) * 2 * jitter;
+        const randomJitterY = (Math.random() - 0.5) * 2 * jitter;
+        const clickX = box.x + box.width / 2 + randomJitterX;
+        const clickY = box.y + box.height / 2 + randomJitterY;
+
+        // Random delays within specified ranges (simulates human reaction time)
+        const preDelay = command.preDelay ?? [30, 80];
+        const postDelay = command.postDelay ?? [50, 150];
+        const preDelayMs = Math.floor(Math.random() * (preDelay[1] - preDelay[0])) + preDelay[0];
+        const postDelayMs = Math.floor(Math.random() * (postDelay[1] - postDelay[0])) + postDelay[0];
+
+        const page = this.browser.getPage();
+
+        // Scroll element into view first (like browser-use)
+        await locator.scrollIntoViewIfNeeded();
+        await new Promise(r => setTimeout(r, 50)); // 50ms post-scroll delay
+
+        // Move mouse to position first (human behavior)
+        await page.mouse.move(clickX, clickY);
+        await new Promise(r => setTimeout(r, preDelayMs));
+
+        // Perform click with proper mousePressed/mouseReleased separation
+        await page.mouse.down({ button: command.button as 'left' | 'right' | 'middle' });
+        await new Promise(r => setTimeout(r, 80)); // 80ms hold time
+        await page.mouse.up({ button: command.button as 'left' | 'right' | 'middle' });
+
+        // Post-click delay
+        await new Promise(r => setTimeout(r, postDelayMs));
+
+        return {
+          clicked: command.selector,
+          coordinates: { x: clickX, y: clickY },
+          delays: { pre: preDelayMs, post: postDelayMs },
+          humanLike: true,
+        };
+      }
+
+      // Detect Input Variables (infer field types from attributes)
+      case 'detectVariables': {
+        const page = this.browser.getPage();
+
+        const variables = await page.evaluate((selector?: string) => {
+          const inputs = selector
+            ? document.querySelectorAll(`${selector} input, ${selector} textarea, ${selector} select`)
+            : document.querySelectorAll('input, textarea, select');
+
+          const detected: Array<{
+            name: string;
+            type: string;
+            format?: string;
+            placeholder?: string;
+            label?: string;
+            autocomplete?: string;
+            inputMode?: string;
+            pattern?: string;
+            required: boolean;
+            selector: string;
+          }> = [];
+
+          // Patterns for type inference
+          const patterns = {
+            email: /email|e-mail|correo/i,
+            phone: /phone|tel|mobile|cell|fax|telefon/i,
+            password: /password|passwd|pwd|secret/i,
+            date: /date|birth|dob|born|fecha/i,
+            time: /time|hora/i,
+            url: /url|website|site|link/i,
+            number: /number|amount|quantity|price|cost|age|year/i,
+            name: /name|nombre|first|last|full/i,
+            address: /address|street|city|state|zip|postal|country|direccion/i,
+            creditCard: /card|credit|cc|cvv|cvc|expir/i,
+            ssn: /ssn|social.*security|tax.*id/i,
+          };
+
+          inputs.forEach((input, index) => {
+            const el = input as HTMLInputElement;
+            const name = el.name || el.id || `field_${index}`;
+
+            // Get associated label
+            let label = '';
+            const labelEl = document.querySelector(`label[for="${el.id}"]`);
+            if (labelEl) {
+              label = labelEl.textContent?.trim() || '';
+            } else {
+              // Check parent for label
+              const parent = el.closest('label');
+              if (parent) {
+                label = parent.textContent?.trim().replace(el.value, '') || '';
+              }
+            }
+
+            // Combine all hints for pattern matching
+            const hints = [
+              name,
+              el.id,
+              el.placeholder,
+              label,
+              el.getAttribute('aria-label'),
+              el.className,
+              el.getAttribute('autocomplete'),
+            ].filter(Boolean).join(' ').toLowerCase();
+
+            // Infer type from HTML type attribute or pattern matching
+            let inferredType = el.type || 'text';
+            let format: string | undefined;
+
+            // Override with pattern-based inference
+            for (const [typeName, pattern] of Object.entries(patterns)) {
+              if (pattern.test(hints)) {
+                inferredType = typeName;
+                break;
+              }
+            }
+
+            // Check for specific formats
+            if (el.getAttribute('data-datepicker') || el.getAttribute('data-mask')?.includes('date')) {
+              format = 'datepicker';
+            }
+            if (el.getAttribute('inputmode') === 'numeric' || el.getAttribute('data-mask')?.includes('9')) {
+              format = 'numeric';
+            }
+
+            // Generate selector
+            let selector = el.tagName.toLowerCase();
+            if (el.id) selector += `#${el.id}`;
+            else if (el.name) selector += `[name="${el.name}"]`;
+            else if (el.className) selector += `.${el.className.split(' ')[0]}`;
+
+            detected.push({
+              name,
+              type: inferredType,
+              format,
+              placeholder: el.placeholder || undefined,
+              label: label || undefined,
+              autocomplete: el.getAttribute('autocomplete') || undefined,
+              inputMode: el.getAttribute('inputmode') || undefined,
+              pattern: el.getAttribute('pattern') || undefined,
+              required: el.required,
+              selector,
+            });
+          });
+
+          return detected;
+        }, command.selector);
+
+        return {
+          variables,
+          count: variables.length,
+          types: [...new Set(variables.map(v => v.type))],
+        };
+      }
+
+      // Health Check / Watchdog
+      case 'healthCheck': {
+        const page = this.browser.getPage();
+        const results: {
+          healthy: boolean;
+          network?: { idle: boolean; pendingRequests: number };
+          console?: { errors: number; warnings: number };
+          responsive?: { responded: boolean; responseTime: number };
+          issues: string[];
+        } = {
+          healthy: true,
+          issues: [],
+        };
+
+        // Check network state
+        if (command.checkNetwork !== false) {
+          const requests = this.browser.getNetworkRequests();
+          const pending = requests.filter(r => !r.status);
+          results.network = {
+            idle: pending.length === 0,
+            pendingRequests: pending.length,
+          };
+          if (pending.length > 10) {
+            results.issues.push(`High pending requests: ${pending.length}`);
+          }
+        }
+
+        // Check console for errors
+        if (command.checkConsole !== false) {
+          const messages = this.browser.getConsoleMessages();
+          const errors = messages.filter(m => m.type === 'error');
+          const warnings = messages.filter(m => m.type === 'warning');
+          results.console = {
+            errors: errors.length,
+            warnings: warnings.length,
+          };
+          if (errors.length > 0) {
+            results.issues.push(`Console errors: ${errors.length}`);
+            results.healthy = false;
+          }
+        }
+
+        // Check page responsiveness
+        if (command.checkResponsive !== false) {
+          const startTime = Date.now();
+          try {
+            await Promise.race([
+              page.evaluate(() => 1 + 1),
+              new Promise((_, reject) =>
+                setTimeout(() => reject(new Error('timeout')), command.timeout ?? 5000)
+              ),
+            ]);
+            results.responsive = {
+              responded: true,
+              responseTime: Date.now() - startTime,
+            };
+          } catch {
+            results.responsive = {
+              responded: false,
+              responseTime: Date.now() - startTime,
+            };
+            results.issues.push('Page not responding');
+            results.healthy = false;
+          }
+        }
+
+        return results;
+      }
+
+      // Multi-Strategy Clear (from browser-use element.py)
+      case 'multiClear': {
+        const locator = this.browser.getLocator(command.selector);
+        const page = this.browser.getPage();
+
+        // Strategy 1: Try Playwright's clear
+        let cleared = false;
+        try {
+          await locator.clear({ timeout: 1000 });
+          cleared = true;
+        } catch {
+          // Strategy 2: Triple-click to select all, then delete
+          try {
+            await locator.click({ clickCount: 3 });
+            await page.keyboard.press('Backspace');
+            cleared = true;
+          } catch {
+            // Strategy 3: Ctrl+A then delete
+            try {
+              await locator.click();
+              const modifier = process.platform === 'darwin' ? 'Meta' : 'Control';
+              await page.keyboard.press(`${modifier}+a`);
+              await page.keyboard.press('Backspace');
+              cleared = true;
+            } catch {
+              // Strategy 4: JavaScript fallback with framework events
+              await locator.evaluate((el: HTMLInputElement) => {
+                el.select();
+                el.value = '';
+                // Trigger React/Vue/Angular events
+                el.dispatchEvent(new Event('input', { bubbles: true }));
+                el.dispatchEvent(new Event('change', { bubbles: true }));
+              });
+              cleared = true;
+            }
+          }
+        }
+
+        // Trigger framework events if requested
+        if (cleared && command.triggerFrameworkEvents !== false) {
+          await locator.evaluate((el: HTMLInputElement) => {
+            el.dispatchEvent(new Event('input', { bubbles: true }));
+            el.dispatchEvent(new Event('change', { bubbles: true }));
+            el.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'deleteContent' }));
+          });
+        }
+
+        return { cleared: command.selector, strategy: 'multi' };
+      }
+
       default:
         throw new Error(`Unknown action: ${(command as any).action}`);
     }

@@ -895,6 +895,59 @@ const downloadPdfSchema = baseCommandSchema.extend({
 });
 
 // ============================================================================
+// Tier 3: Human-Like Click (from browser-use element.py)
+// ============================================================================
+
+const humanClickSchema = baseCommandSchema.extend({
+  action: z.literal('humanClick'),
+  selector: z.string(),
+  button: z.enum(['left', 'right', 'middle']).optional().default('left'),
+  /** Add random jitter to click position (pixels) */
+  jitter: z.number().optional().default(3),
+  /** Pre-click delay range [min, max] in ms */
+  preDelay: z.tuple([z.number(), z.number()]).optional().default([30, 80]),
+  /** Post-click delay range [min, max] in ms */
+  postDelay: z.tuple([z.number(), z.number()]).optional().default([50, 150]),
+});
+
+// ============================================================================
+// Tier 3: Detect Input Variables (from browser-use agent/views.py)
+// ============================================================================
+
+const detectVariablesSchema = baseCommandSchema.extend({
+  action: z.literal('detectVariables'),
+  /** Only analyze specific selector, or entire page if omitted */
+  selector: z.string().optional(),
+});
+
+// ============================================================================
+// Tier 3: Health Check / Watchdog (browser-use pattern)
+// ============================================================================
+
+const healthCheckSchema = baseCommandSchema.extend({
+  action: z.literal('healthCheck'),
+  /** Check network idle state */
+  checkNetwork: z.boolean().optional().default(true),
+  /** Check for console errors */
+  checkConsole: z.boolean().optional().default(true),
+  /** Check page responsiveness */
+  checkResponsive: z.boolean().optional().default(true),
+  /** Timeout for responsiveness check in ms */
+  timeout: z.number().optional().default(5000),
+});
+
+// ============================================================================
+// Tier 3: Multi-Strategy Clear (from browser-use element.py)
+// ============================================================================
+
+const multiClearSchema = baseCommandSchema.extend({
+  action: z.literal('multiClear'),
+  selector: z.string(),
+  /** Trigger React/Vue change events after clearing */
+  triggerFrameworkEvents: z.boolean().optional().default(true),
+});
+
+// ============================================================================
 // Tier 3: Network Request Viewing
 // ============================================================================
 
@@ -1069,6 +1122,11 @@ export const commandSchema = z.discriminatedUnion('action', [
   detectPaginationSchema,
   findTextOnPageSchema,
   downloadPdfSchema,
+  // Tier 3: Human-Like & Detection Features
+  humanClickSchema,
+  detectVariablesSchema,
+  healthCheckSchema,
+  multiClearSchema,
 ]);
 
 export type Command = z.infer<typeof commandSchema>;

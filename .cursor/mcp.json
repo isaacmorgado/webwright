@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "webwright": {
+      "command": "node",
+      "args": ["./bin/agentbrowser-pro", "mcp"],
+      "cwd": "/Users/imorgado/Desktop/UNIFIED BROWSER/agentbrowser-pro"
+    }
+  }
+}

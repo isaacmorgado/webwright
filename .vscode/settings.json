@@ -1,0 +1,9 @@
+{
+  "claude.mcp.servers": {
+    "webwright": {
+      "command": "node",
+      "args": ["${workspaceFolder}/bin/agentbrowser-pro", "mcp"],
+      "transport": "stdio"
+    }
+  }
+}

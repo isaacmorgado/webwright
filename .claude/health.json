@@ -1,0 +1,10 @@
+{
+    "status": "healthy",
+    "timestamp": "2026-01-18T18:52:50Z",
+    "issues": [],
+    "checks": {
+        "stuck_issues": 0,
+        "circuits_open": 0,
+        "recent_errors": 0
+    }
+}
